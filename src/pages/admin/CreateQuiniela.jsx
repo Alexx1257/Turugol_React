@@ -1,275 +1,485 @@
-// src/pages/admin/CreateQuiniela.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+// 🛑 Importar tu configuración de Firebase
+import { db, auth } from '../../firebase/config'; 
+import { doc, setDoc, getDoc, deleteDoc, collection } from 'firebase/firestore'; 
+// Si necesitas el UID del usuario autenticado, asegúrate de que 'auth' está importado.
+
+// --- CONSTANTES DE FIREBASE Y SESIÓN ---
+const QUINIELA_BORRADORES_COLLECTION = "quinielaBorradores";
+const QUINIELAS_FINAL_COLLECTION = "quinielas";
+// ------------------------------------------
+
+// --- CONFIGURACIÓN API-FOOTBALL ---
+const API_BASE_URL = '/api-football/fixtures';
+const SEASON_YEAR = 2025;
+const MAX_FIXTURES = 9;
+
+// Opciones de Pronóstico (Base de la Quiniela)
+const PREDICTION_OPTIONS_BASIC = ['1', 'X', '2'];
+
+// --- DATOS SIMULADOS PARA SELECCIÓN DE LIGA Y JORNADA ---
+const DUMMY_LEAGUES = [
+    { id: 140, name: 'LaLiga (España)', nameShort: 'LALIGA' },
+    { id: 39, name: 'Premier League (Inglaterra)', nameShort: 'PREMIER' },
+];
+
+const DUMMY_ROUNDS = [
+    'Regular Season - 1', 'Regular Season - 2', 'Regular Season - 3', 'Regular Season - 4', 
+    'Regular Season - 5', 'Regular Season - 6',
+];
+// -----------------------------------------------------------
+
 
 const CreateQuiniela = () => {
-  const [formData, setFormData] = useState({
-    titulo: '',
-    liga: '',
-    jornada: '',
-    fechaCierre: '',
-    descripcion: '',
-  });
-  
-  // Función para inicializar el estado con exactamente 9 partidos
-  const createInitialPartidos = () => {
-    // Una quiniela está conformada por 9 juegos
-    return Array.from({ length: 9 }, () => ({ local: '', visitante: '', fecha: '' }));
-  };
+    // 🛑 SIMULACIÓN DEL UID DEL ADMIN (REEMPLAZAR CON LÓGICA REAL DE AUTH)
+    // Usamos un estado para el ID del admin, obtenido de tu consola:
+    const [adminId, setAdminId] = useState('3LYBT43967WKqFfY1ZpsWGNVrO33');
+    // En producción: Usa un useEffect o custom hook para obtener auth.currentUser.uid
 
-  // Inicialización con 9 juegos
-  const [partidos, setPartidos] = useState(createInitialPartidos());
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  // Manejador de cambios para los campos de partido
-  const handlePartidoChange = (index, e) => {
-    const { name, value } = e.target;
-    const newPartidos = partidos.map((partido, i) => {
-      if (i === index) {
-        return { ...partido, [name]: value };
-      }
-      return partido;
-    });
-    setPartidos(newPartidos);
-  };
-  
-  // Se eliminaron handleAddPartido y handleRemovePartido ya que los 9 juegos son fijos.
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
+    // ESTADO DEL FORMULARIO
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [deadline, setDeadline] = useState(''); 
+    const [selectedLeagueId, setSelectedLeagueId] = useState(DUMMY_LEAGUES[0].id);
+    const [selectedRound, setSelectedRound] = useState(''); 
+    const [apiFixtures, setApiFixtures] = useState([]); 
+    const [selectedFixtures, setSelectedFixtures] = useState([]); 
     
-    // Validación de que todos los campos de los 9 partidos estén completos
-    if (partidos.some(p => !p.local || !p.visitante || !p.fecha)) {
-        alert('Por favor, completa todos los detalles de los 9 partidos (Local, Visitante y Fecha).');
-        return;
-    }
-    
-    // Validación de datos generales (aunque los campos ya tienen 'required')
-    const { titulo, liga, jornada, fechaCierre, descripcion } = formData;
-    if (!titulo || !liga || !jornada || !fechaCierre || !descripcion) {
-        alert('Por favor, completa todos los campos de datos generales.');
-        return;
-    }
+    // ESTADO DE LA INTERFAZ
+    const [isLoading, setIsLoading] = useState(false);
+    const [apiError, setApiError] = useState(null);
+    const [isSaving, setIsSaving] = useState(false); 
 
-    setIsLoading(true);
-    
-    // Simulación de lógica de creación de quiniela
-    console.log('Creando quiniela con datos generales:', formData);
-    console.log('Partidos incluidos:', partidos);
-    
-    setTimeout(() => {
-      setIsLoading(false);
-      alert(`¡Quiniela "${formData.titulo}" con 9 partidos creada con éxito!`);
-      // Resetear formulario
-      setFormData({
-        titulo: '',
-        liga: '',
-        jornada: '',
-        fechaCierre: '',
-        descripcion: '',
-      });
-      setPartidos(createInitialPartidos()); 
-    }, 1500);
-  };
+    const initialLoadRef = useRef(true); 
 
-  return (
-    <DashboardLayout isAdmin={true}>
-      <div className="bg-white p-6 rounded-xl shadow-md">
-        <h2 className="text-2xl font-bold text-red-700 mb-6">Crear Nueva Quiniela</h2>
+    // ----------------------------------------------------------------------------------
+    // 🛑 FUNCIONES REALES DE FIREBASE (Aisladas) 🛑
+    // ----------------------------------------------------------------------------------
+
+    const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
+
+    const saveDraftToFirebase = async (data, uid) => {
+        const borradorRef = getBorradorRef(uid);
+        await setDoc(borradorRef, data);
+    };
+
+    const loadDraftFromFirebase = async (uid) => {
+        const borradorRef = getBorradorRef(uid);
+        const docSnap = await getDoc(borradorRef);
+        return docSnap.exists() ? docSnap.data() : null; 
+    };
+
+    const deleteDraftFromFirebase = async (uid) => {
+        const borradorRef = getBorradorRef(uid);
+        await deleteDoc(borradorRef);
+    };
+
+    const saveFinalQuiniela = async (payload) => {
+        const quinielaRef = doc(collection(db, QUINIELAS_FINAL_COLLECTION));
+        await setDoc(quinielaRef, payload);
+        return quinielaRef.id;
+    };
+    // ----------------------------------------------------------------------------------
+
+
+    // =========================================================
+    // 🛑 EFECTO 1: CARGAR BORRADOR AL INICIO (usa adminId)
+    // =========================================================
+    useEffect(() => {
+        // Solo intentamos cargar si tenemos el ID del administrador
+        if (!adminId) return;
+
+        const loadInitialDraft = async () => {
+            try {
+                const draft = await loadDraftFromFirebase(adminId);
+                if (draft) {
+                    setTitle(draft.title || '');
+                    setDescription(draft.description || '');
+                    setDeadline(draft.deadline || '');
+                    setSelectedFixtures(draft.selectedFixtures || []);
+                    setSelectedLeagueId(draft.selectedLeagueId || DUMMY_LEAGUES[0].id);
+                    setSelectedRound(draft.selectedRound || ''); 
+                }
+            } catch (error) {
+                console.error("Error al cargar el borrador:", error);
+            }
+            initialLoadRef.current = false;
+        };
+
+        loadInitialDraft();
+    }, [adminId]); // Dependencia del ID de administrador
+
+    // =========================================================
+    // 🛑 EFECTO 2: AUTOSAVE DEL BORRADOR (usa adminId)
+    // =========================================================
+    useEffect(() => {
+        if (initialLoadRef.current || !adminId) return;
+
+        setIsSaving(true);
         
-        <form onSubmit={handleSubmit} className="space-y-8">
-          
-          {/* Sección de Datos Generales */}
-          <div className="space-y-6 border-b pb-6 border-gray-200">
-            <h3 className="text-xl font-semibold text-gray-800">1. Datos Generales de la Quiniela</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Título de la Quiniela */}
-              <div>
-                <label htmlFor="titulo" className="block text-sm font-medium text-gray-700 mb-1">
-                  Título
-                </label>
-                <input 
-                  id="titulo" 
-                  name="titulo" 
-                  type="text" 
-                  required
-                  value={formData.titulo}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                  placeholder="Ej: LaLiga - Jornada 29"
-                />
-              </div>
-              
-              {/* Liga */}
-              <div>
-                <label htmlFor="liga" className="block text-sm font-medium text-gray-700 mb-1">
-                  Liga
-                </label>
-                <select
-                  id="liga"
-                  name="liga"
-                  required
-                  value={formData.liga}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="">Selecciona una liga</option>
-                  <option value="LIGA SANTANDER">LIGA SANTANDER</option>
-                  <option value="CHAMPIONS LEAGUE">CHAMPIONS LEAGUE</option>
-                  <option value="PREMIER LEAGUE">PREMIER LEAGUE</option>
-                </select>
-              </div>
-              
-              {/* Jornada/Fase */}
-              <div>
-                <label htmlFor="jornada" className="block text-sm font-medium text-gray-700 mb-1">
-                  Jornada / Fase
-                </label>
-                <input 
-                  id="jornada" 
-                  name="jornada" 
-                  type="text" 
-                  required
-                  value={formData.jornada}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                  placeholder="Ej: Jornada 29"
-                />
-              </div>
+        const draftData = {
+            title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound
+        };
 
-              {/* Fecha de Cierre */}
-              <div>
-                <label htmlFor="fechaCierre" className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha de Cierre de Pronósticos
-                </label>
-                <input 
-                  id="fechaCierre" 
-                  name="fechaCierre" 
-                  type="datetime-local" 
-                  required
-                  value={formData.fechaCierre}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-            </div>
+        const timer = setTimeout(async () => {
+            if (title || selectedFixtures.length > 0) {
+                try {
+                    await saveDraftToFirebase(draftData, adminId);
+                } catch (error) {
+                    console.error("Fallo al guardar borrador:", error);
+                }
+            }
+            setIsSaving(false);
+        }, 1500); 
 
-            {/* Descripción */}
-            <div>
-              <label htmlFor="descripcion" className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción
-              </label>
-              <textarea
-                id="descripcion"
-                name="descripcion"
-                rows="3"
-                required
-                value={formData.descripcion}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
-                placeholder="Escribe una descripción corta de la quiniela..."
-              ></textarea>
-            </div>
-          </div>
+        return () => clearTimeout(timer); 
+    }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, adminId]);
+    
+    
+    // --- MANEJADORES DE ESTADO (sin cambios en la lógica) ---
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'title') setTitle(value);
+        if (name === 'description') setDescription(value);
+        if (name === 'deadline') setDeadline(value);
+    };
 
-          {/* Sección de Partidos - Fija a 9 Juegos */}
-          <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-800">
-                2. Partidos de la Quiniela (9 Juegos Requeridos)
-            </h3>
+    const handleLeagueChange = (e) => {
+        setSelectedLeagueId(parseInt(e.target.value));
+        setSelectedRound(''); 
+        setApiFixtures([]); 
+    };
+    
+    const handleRoundChange = (e) => {
+        setSelectedRound(e.target.value);
+        setApiFixtures([]);
+    };
+
+    const toggleFixtureSelection = (fixtureData) => {
+        setSelectedFixtures(prev => {
+            const isSelected = prev.some(f => f.fixture.id === fixtureData.fixture.id);
+            if (isSelected) {
+                return prev.filter(f => f.fixture.id !== fixtureData.fixture.id);
+            } else if (prev.length < MAX_FIXTURES) {
+                const league = DUMMY_LEAGUES.find(l => l.id === selectedLeagueId);
+                
+                return [...prev, { 
+                    ...fixtureData, 
+                    league: { 
+                        id: selectedLeagueId, 
+                        name: league.name, 
+                        nameShort: league.nameShort, 
+                        round: fixtureData.league.round 
+                    }, 
+                    prediction: '' 
+                }];
+            }
+            return prev; 
+        });
+    };
+    
+    const handlePredictionChange = (fixtureId, predictionValue) => {
+        setSelectedFixtures(prev => 
+            prev.map(f => 
+                f.fixture.id === fixtureId 
+                    ? { ...f, prediction: predictionValue } 
+                    : f
+            )
+        );
+    };
+
+    // --- FETCH DE DATOS DE LA API (sin cambios) ---
+    const fetchFixtures = useCallback(async (leagueId, roundName) => {
+        if (!leagueId || !roundName) return;
+        setIsLoading(true);
+        setApiError(null);
+        
+        const API_URL = `${API_BASE_URL}?league=${leagueId}&season=${SEASON_YEAR}&round=${encodeURIComponent(roundName)}`;
+
+        try {
+            const response = await fetch(API_URL);
+            if (!response.ok) { throw new Error(`Error HTTP: ${response.status}.`); }
+            const data = await response.json();
+            if (data.errors && Object.keys(data.errors).length > 0) { throw new Error(`API Error: ${JSON.stringify(data.errors)}`); }
+            setApiFixtures(data.response || []);
+            setApiError(null);
+        } catch (err) {
+            console.error("Error al obtener datos de API-Football:", err);
+            setApiError(`Fallo al cargar partidos: ${err.message}.`);
+            setApiFixtures([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []); 
+
+    useEffect(() => {
+        if (selectedRound) {
+            fetchFixtures(selectedLeagueId, selectedRound);
+        } else {
+            setApiFixtures([]);
+        }
+    }, [selectedLeagueId, selectedRound, fetchFixtures]);
+
+
+    // =========================================================
+    // 🛑 SUBMIT FINAL (Lógica de Guardado Final y Limpieza)
+    // =========================================================
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const allPredictedSimple = selectedFixtures.every(f => f.prediction && f.prediction !== ''); 
+
+        if (!adminId) {
+             alert('Error: El usuario administrador no está autenticado.');
+             return;
+        }
+
+        if (!title || !deadline || selectedFixtures.length !== MAX_FIXTURES || !allPredictedSimple) {
+             alert('Por favor, completa el Título y el Cierre, selecciona exactamente 9 partidos y asigna un pronóstico base (1, X, o 2) a cada uno.');
+            return;
+        }
+
+        // 1. Preparar Payload Final
+        const quinielaPayload = {
+            metadata: { 
+                title, 
+                description, 
+                deadline, 
+                createdBy: adminId, 
+                createdAt: new Date().toISOString() 
+            },
+            fixtures: selectedFixtures.map(f => ({
+                id: f.fixture.id,
+                leagueId: f.league.id,
+                leagueName: f.league.name,
+                round: f.league.round, 
+                homeTeam: f.teams.home.name,
+                awayTeam: f.teams.away.name,
+                matchDate: f.fixture.date, 
+                adminPrediction: f.prediction, 
+            })),
+        };
+
+        try {
+            // 2. Guardar en la colección FINAL de quinielas
+            const newQuinielaId = await saveFinalQuiniela(quinielaPayload);
             
-            <div className="space-y-4">
-                {partidos.map((partido, index) => (
-                    <div key={index} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        
-                        {/* Indicador de Partido */}
-                        <div className="text-lg font-bold text-red-700 w-10 flex-shrink-0">
-                            P{index + 1}:
-                        </div>
+            // 3. Eliminar el borrador
+            await deleteDraftFromFirebase(adminId);
 
-                        {/* Equipo Local */}
-                        <div className="flex-grow">
-                            <label htmlFor={`local-${index}`} className="block text-xs font-medium text-gray-500 mb-1">Local (1)</label>
-                            <input
-                                id={`local-${index}`}
-                                name="local"
-                                type="text"
-                                required
-                                value={partido.local}
-                                onChange={(e) => handlePartidoChange(index, e)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                placeholder="Ej: Real Madrid"
-                            />
-                        </div>
+            console.log('--- Quiniela CREADA con ID ---', newQuinielaId);
+            alert(`¡Quiniela "${title}" creada y guardada con éxito!`);
 
-                        {/* Equipo Visitante */}
-                        <div className="flex-grow">
-                            <label htmlFor={`visitante-${index}`} className="block text-xs font-medium text-gray-500 mb-1">Visitante (2)</label>
-                            <input
-                                id={`visitante-${index}`}
-                                name="visitante"
-                                type="text"
-                                required
-                                value={partido.visitante}
-                                onChange={(e) => handlePartidoChange(index, e)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                placeholder="Ej: Barcelona"
-                            />
-                        </div>
+            // 4. Resetear el formulario
+            setTitle('');
+            setDescription('');
+            setDeadline('');
+            setSelectedRound('');
+            setSelectedFixtures([]);
+            setApiFixtures([]);
 
-                        {/* Fecha/Hora del Partido */}
-                        <div className="w-56 flex-shrink-0">
-                            <label htmlFor={`fecha-${index}`} className="block text-xs font-medium text-gray-500 mb-1">Fecha/Hora</label>
-                            <input
-                                id={`fecha-${index}`}
-                                name="fecha"
-                                type="datetime-local"
-                                required
-                                value={partido.fecha}
-                                onChange={(e) => handlePartidoChange(index, e)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
-                        </div>
-                        
-                        {/* Se eliminó el botón de Eliminar */}
+        } catch (error) {
+            console.error("Error al finalizar la quiniela:", error);
+            alert("Error al guardar la quiniela. Revisa la consola y tu conexión a Firebase.");
+        }
+    };
+
+    const isReadyToSubmit = title && deadline && selectedFixtures.length === MAX_FIXTURES && 
+                           selectedFixtures.every(f => f.prediction && f.prediction !== '') && !isLoading;
+
+
+    // --- RENDERIZADO (sin cambios en JSX) ---
+    return (
+        <DashboardLayout isAdmin={true}>
+            <div className="p-6 max-w-screen-xl mx-auto w-full"> 
+                <h2 className="text-3xl font-bold text-red-700 mb-8 border-b pb-3">
+                    ✍️ Crear Nueva Quiniela (Máx. {MAX_FIXTURES} Partidos)
+                </h2>
+                
+                {isSaving && (
+                    <div className="fixed top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 p-2 rounded-lg text-sm z-50">
+                        Guardando borrador automáticamente...
                     </div>
-                ))}
-            </div>
-          </div>
-          
-          {/* Botón de envío final (Guardar Quiniela) */}
-          <div>
-            <button 
-              type="submit"
-              // El botón se deshabilita si está cargando
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-lg text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                {isLoading ? (
-                  <i className="fas fa-spinner fa-spin"></i>
-                ) : (
-                  <i className="fas fa-save"></i>
                 )}
-              </span>
-              {isLoading ? 'Guardando Quiniela...' : `Crear y Guardar Quiniela con 9 partidos`}
-            </button>
-          </div>
-        </form>
+                
+                <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6">
+                    
+                    {/* ========== PANEL IZQUIERDO: SELECCIÓN Y DATOS GENERALES (65%) ========== */}
+                    <div className="lg:w-2/3 space-y-8 bg-white p-6 rounded-xl shadow-lg h-fit"> 
+                        
+                        {/* 1. Datos Generales */}
+                        <section className="space-y-6 border-b pb-6 border-gray-200">
+                            <h3 className="text-xl font-semibold text-gray-800">1. Datos Generales</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label htmlFor="title" className="block text-sm">Título</label> <input id="title" name="title" type="text" required value={title} onChange={handleInputChange} className="w-full px-4 py-2 border rounded-lg" placeholder="Ej: Quiniela General" /></div>
+                                <div><label htmlFor="deadline" className="block text-sm">Cierre</label> <input id="deadline" name="deadline" type="datetime-local" required value={deadline} onChange={handleInputChange} className="w-full px-4 py-2 border rounded-lg" /></div>
+                                <div className="md:col-span-2"><label htmlFor="description" className="block text-sm">Descripción</label> <textarea id="description" name="description" rows="2" value={description} onChange={handleInputChange} className="w-full px-4 py-2 border rounded-lg" placeholder="Reglas o notas..." /></div>
+                            </div>
+                        </section>
 
-      </div>
-    </DashboardLayout>
-  );
+                        {/* 2. Búsqueda de Partidos */}
+                        <section className="space-y-4 border-b pb-6 border-gray-200">
+                            <h3 className="text-xl font-semibold text-gray-800">2. Buscar Partidos</h3>
+                            
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label htmlFor="league-select" className="block text-sm">Liga</label>
+                                    <select id="league-select" value={selectedLeagueId} onChange={handleLeagueChange} className="w-full px-2 py-2 border rounded-lg">
+                                        {DUMMY_LEAGUES.map(league => (<option key={league.id} value={league.id}>{league.nameShort}</option>))}
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label htmlFor="round-select" className="block text-sm">Jornada</label>
+                                    <select id="round-select" value={selectedRound} onChange={handleRoundChange} disabled={isLoading} className="w-full px-2 py-2 border rounded-lg disabled:bg-gray-100">
+                                        <option value="">-- Selecciona una Jornada --</option>
+                                        {DUMMY_ROUNDS.map(round => (<option key={round} value={round}>{round}</option>))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {isLoading && <p className="text-center text-red-500 font-semibold mt-4">Cargando partidos de la API...</p>}
+                            {apiError && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mt-4">Error: {apiError}</div>}
+                        </section>
+
+                        {/* 3. Lista de Partidos Encontrados (Scroll Implementado) */}
+                        <section className="space-y-4">
+                            <h3 className="text-xl font-semibold text-gray-800">3. Partidos Encontrados (Clic para Añadir)</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                                {apiFixtures.length > 0 ? (
+                                    apiFixtures.map((fixtureData) => {
+                                        const fixture = fixtureData.fixture;
+                                        const teams = fixtureData.teams;
+                                        const date = new Date(fixture.date);
+                                        const isSelected = selectedFixtures.some(f => f.fixture.id === fixture.id);
+                                        
+                                        return (
+                                            <div 
+                                                key={fixture.id} 
+                                                onClick={() => toggleFixtureSelection(fixtureData)}
+                                                className={`p-4 rounded-xl shadow-sm cursor-pointer transition duration-150 border-2 
+                                                            ${isSelected 
+                                                                ? 'border-green-600 bg-green-50 ring-2 ring-green-400' 
+                                                                : 'border-gray-100 bg-white hover:border-red-300 hover:shadow'}`}
+                                            >
+                                                <div className="text-sm font-semibold text-gray-700 mb-2 border-b pb-2">
+                                                    JORNADA: **{fixtureData.league.round || 'N/A'}**
+                                                </div>
+                                                <div className="flex justify-between items-center space-x-2">
+                                                    
+                                                    <div className="flex items-center justify-end w-5/12 text-right">
+                                                        <span className="font-bold text-sm text-gray-900 truncate mr-1">{teams.home.nameShort || teams.home.name.split(' ')[0]}</span>
+                                                        <img src={teams.home.logo} alt={teams.home.name} className="w-5 h-5" />
+                                                    </div>
+
+                                                    <span className="text-xs font-bold text-red-500 flex-shrink-0">VS</span>
+
+                                                    <div className="flex items-center justify-start w-5/12 text-left">
+                                                        <img src={teams.away.logo} alt={teams.away.name} className="w-5 h-5" />
+                                                        <span className="font-bold text-sm text-gray-900 truncate ml-1">{teams.away.nameShort || teams.away.name.split(' ')[0]}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-center text-xs text-gray-500 mt-2 border-t pt-2 border-gray-100">
+                                                    {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({date.toLocaleDateString()})
+                                                </div>
+
+                                                {isSelected && (
+                                                    <div className="text-xs text-center text-green-700 font-bold mt-2 pt-2 border-t border-green-200">AÑADIDO</div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    !isLoading && !apiError && selectedRound && <p className="text-center text-gray-500 md:col-span-2">No hay partidos disponibles.</p>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+
+                    {/* ========== PANEL DERECHO: QUINIELA FINAL (33%) - CON BOTONES ========== */}
+                    <div className="lg:w-1/3 space-y-6">
+                        <div className="sticky top-6 bg-white p-6 rounded-xl shadow-lg">
+                            <h3 className="text-xl font-bold text-red-700">
+                                4. Quiniela Final ({selectedFixtures.length}/{MAX_FIXTURES})
+                            </h3>
+                            <p className={`text-sm mt-1 mb-4 ${selectedFixtures.length === MAX_FIXTURES ? 'text-green-600' : 'text-red-500'}`}>
+                                {selectedFixtures.length === MAX_FIXTURES 
+                                    ? '¡Completo! Asigna el pronóstico base.' 
+                                    : `Faltan ${MAX_FIXTURES - selectedFixtures.length} partidos.`}
+                            </p>
+                            
+                            <div className="space-y-4 max-h-[550px] overflow-y-auto pr-2">
+                                {selectedFixtures
+                                    .sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date))
+                                    .map((f, index) => (
+                                    <div key={f.fixture.id} className="p-3 border border-gray-200 rounded-lg flex flex-col justify-between bg-gray-50">
+                                        
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="w-1/2 flex-shrink-0">
+                                                <div className="font-semibold text-sm">
+                                                    P{index + 1}. ({f.league.nameShort})
+                                                </div>
+                                                <div className="text-xs text-gray-600 truncate">
+                                                    {f.teams.home.nameShort || f.teams.home.name.split(' ')[0]} vs {f.teams.away.nameShort || f.teams.away.name.split(' ')[0]}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-right text-gray-500">
+                                                {new Date(f.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex justify-around space-x-1 pt-2 border-t border-gray-200">
+                                            {PREDICTION_OPTIONS_BASIC.map(value => {
+                                                const isSelected = f.prediction === value;
+                                                
+                                                let bgColor = 'bg-gray-200 text-gray-700 hover:bg-gray-300';
+                                                if (isSelected) {
+                                                    bgColor = value === '1' ? 'bg-green-500 text-white' : 
+                                                             value === 'X' ? 'bg-yellow-500 text-white' : 
+                                                             'bg-red-500 text-white';
+                                                }
+                                                
+                                                return (
+                                                    <button
+                                                        key={value}
+                                                        type="button"
+                                                        onClick={() => handlePredictionChange(f.fixture.id, value)}
+                                                        className={`w-1/3 py-1 font-bold rounded-full text-xs transition-colors duration-150 ${bgColor}`}
+                                                    >
+                                                        {value}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                                {selectedFixtures.length === 0 && (
+                                    <p className="text-center text-gray-400 italic pt-4">Añade partidos del panel izquierdo.</p>
+                                )}
+                            </div>
+                            
+                            {/* Botón de Envío Final */}
+                            <div className="mt-6 pt-4 border-t border-red-200">
+                                <button 
+                                    type="submit"
+                                    disabled={!isReadyToSubmit}
+                                    className="w-full py-3 px-4 text-sm font-bold rounded-lg text-white bg-red-600 hover:bg-red-700 focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isLoading ? 'Cargando...' : `Crear Quiniela con ${MAX_FIXTURES} partidos`}
+                                </button>
+                                {!isReadyToSubmit && (
+                                    <p className="text-xs text-red-500 mt-2 text-center">
+                                        Falta Título, Cierre, los 9 partidos o un pronóstico base (1, X o 2).
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </DashboardLayout>
+    );
 };
 
 export default CreateQuiniela;

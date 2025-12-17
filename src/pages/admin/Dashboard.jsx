@@ -24,6 +24,7 @@ const AdminDashboardPage = () => {
                 <p className="text-sm text-gray-600">Próximo Lanzamiento</p>
                 <p className="text-3xl font-bold text-gray-900">Jornada 29</p>
             </div>
+            
         </div>
       </div>
     </DashboardLayout>
