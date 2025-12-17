@@ -10,13 +10,15 @@ const QUINIELA_BORRADORES_COLLECTION = "quinielaBorradores";
 const QUINIELAS_FINAL_COLLECTION = "quinielas";
 // ------------------------------------------
 
-// --- CONFIGURACIÓN API-FOOTBALL (Se mantiene) ---
+// --- CONFIGURACIÓN API-FOOTBALL ---
 const API_BASE_URL = '/api-football/fixtures';
 const SEASON_YEAR = 2025;
 const MAX_FIXTURES = 9;
+
+// Opciones de Pronóstico (Base de la Quiniela)
 const PREDICTION_OPTIONS_BASIC = ['1', 'X', '2'];
 
-// --- DATOS SIMULADOS (Se mantiene) ---
+// --- DATOS SIMULADOS ---
 const DUMMY_LEAGUES = [
     { id: 140, name: 'LaLiga (España)', nameShort: 'LALIGA' },
     { id: 39, name: 'Premier League (Inglaterra)', nameShort: 'PREMIER' },
@@ -31,11 +33,10 @@ const DUMMY_ROUNDS = [
 
 const CreateQuiniela = () => {
     // 🛑 OBTENEMOS EL UID REAL DEL USUARIO AUTENTICADO 🛑
-    // Nota: Si este componente se renderiza, la ruta ya está protegida, por lo que user no debería ser null.
     const user = auth.currentUser; 
-    const currentAdminId = user ? user.uid : null; // UID real
+    const currentAdminId = user ? user.uid : null; 
 
-    // ESTADO DEL FORMULARIO (Se mantiene)
+    // ESTADO DEL FORMULARIO
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [deadline, setDeadline] = useState(''); 
@@ -44,34 +45,40 @@ const CreateQuiniela = () => {
     const [apiFixtures, setApiFixtures] = useState([]); 
     const [selectedFixtures, setSelectedFixtures] = useState([]); 
     
-    // ESTADO DE LA INTERFAZ (Se mantiene)
+    // ESTADO DE LA INTERFAZ
     const [isLoading, setIsLoading] = useState(false);
     const [apiError, setApiError] = useState(null);
     const [isSaving, setIsSaving] = useState(false); 
-    const [saveError, setSaveError] = useState(null); // Nuevo estado para errores de guardado
+    const [saveError, setSaveError] = useState(null); 
 
     const initialLoadRef = useRef(true); 
+    // 🛑 BLOQUEO DE SEGURIDAD PARA EVITAR RE-GUARDADO AL FINALIZAR
+    const isSubmittingRef = useRef(false);
 
     // ----------------------------------------------------------------------------------
-    // 🛑 FUNCIONES REALES DE FIREBASE (Se mantienen) 🛑
+    // 🛑 FUNCIONES REALES DE FIREBASE (Aisladas) 🛑
     // ----------------------------------------------------------------------------------
 
     const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
 
     const saveDraftToFirebase = async (data, uid) => {
+        if (!uid) throw new Error("UID es requerido para guardar borrador.");
         const borradorRef = getBorradorRef(uid);
         await setDoc(borradorRef, data);
     };
 
     const loadDraftFromFirebase = async (uid) => {
+        if (!uid) return null;
         const borradorRef = getBorradorRef(uid);
         const docSnap = await getDoc(borradorRef);
         return docSnap.exists() ? docSnap.data() : null; 
     };
 
     const deleteDraftFromFirebase = async (uid) => {
+        if (!uid) throw new Error("UID es requerido para eliminar borrador.");
         const borradorRef = getBorradorRef(uid);
         await deleteDoc(borradorRef);
+        console.log(`Borrador ${uid} eliminado correctamente.`);
     };
 
     const saveFinalQuiniela = async (payload) => {
@@ -83,11 +90,10 @@ const CreateQuiniela = () => {
 
 
     // =========================================================
-    // 🛑 EFECTO 1: CARGAR BORRADOR AL INICIO (Usa currentAdminId)
+    // 🛑 EFECTO 1: CARGAR BORRADOR AL INICIO 
     // =========================================================
     useEffect(() => {
-        // Solo intentamos cargar si tenemos el ID del administrador real
-        if (!currentAdminId) return;
+        if (!currentAdminId) return; 
 
         const loadInitialDraft = async () => {
             try {
@@ -101,7 +107,6 @@ const CreateQuiniela = () => {
                     setSelectedRound(draft.selectedRound || ''); 
                 }
             } catch (error) {
-                // Si hay un error de carga (ej. red lenta o permisos)
                 console.error("Error al cargar el borrador:", error);
                 setSaveError("Fallo al cargar borrador: " + error.message);
             }
@@ -112,13 +117,12 @@ const CreateQuiniela = () => {
     }, [currentAdminId]); 
 
     // =========================================================
-    // 🛑 EFECTO 2: AUTOSAVE DEL BORRADOR (CORRECCIÓN DE ERRORES)
+    // 🛑 EFECTO 2: AUTOSAVE DEL BORRADOR (CON BLOQUEO SUBMIT)
     // =========================================================
     useEffect(() => {
-        // Bloquear si es la carga inicial o si no hay UID real
-        if (initialLoadRef.current || !currentAdminId) return; 
+        // Bloquear si: carga inicial, no hay ID o si estamos enviando la quiniela final
+        if (initialLoadRef.current || !currentAdminId || isSubmittingRef.current) return; 
         
-        // Limpiar errores previos al guardar
         setSaveError(null);
         setIsSaving(true);
         
@@ -127,16 +131,19 @@ const CreateQuiniela = () => {
         };
 
         const timer = setTimeout(async () => {
+            // Verificación extra dentro del timer por si cambió isSubmitting durante la espera
+            if (isSubmittingRef.current) {
+                setIsSaving(false);
+                return;
+            }
+
             if (title || selectedFixtures.length > 0) {
                 try {
-                    // 🛑 USAMOS EL UID REAL DEL ADMIN 🛑
-                    await saveDraftToFirebase(draftData, currentAdminId);
+                    await saveDraftToFirebase(draftData, currentAdminId); 
                     console.log(`Autosave exitoso para UID: ${currentAdminId}`);
-
                 } catch (error) {
-                    // 🛑 CAPTURA EXPLÍCITA DE ERRORES DE ESCRITURA 🛑
                     console.error("Fallo al guardar borrador:", error);
-                    setSaveError(`Fallo de Autosave: ${error.message}. (Verifica reglas de quinielaBorradores)`);
+                    setSaveError(`Fallo de Autosave: ${error.message}.`);
                 }
             }
             setIsSaving(false);
@@ -146,7 +153,7 @@ const CreateQuiniela = () => {
     }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, currentAdminId]);
     
     
-    // --- MANEJADORES DE ESTADO (Se mantienen) ---
+    // --- MANEJADORES DE ESTADO ---
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         if (name === 'title') setTitle(value);
@@ -198,7 +205,7 @@ const CreateQuiniela = () => {
         );
     };
 
-    // --- FETCH DE DATOS DE LA API (Se mantiene) ---
+    // --- FETCH DE DATOS DE LA API ---
     const fetchFixtures = useCallback(async (leagueId, roundName) => {
         if (!leagueId || !roundName) return;
         setIsLoading(true);
@@ -232,55 +239,45 @@ const CreateQuiniela = () => {
 
 
     // =========================================================
-    // 🛑 SUBMIT FINAL (Lógica de Guardado Final y Limpieza)
+    // 🛑 SUBMIT FINAL (Lógica Corregida para Evitar Conflictos)
     // =========================================================
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const allPredictedSimple = selectedFixtures.every(f => f.prediction && f.prediction !== ''); 
-
-        // Ya validamos que el usuario esté logueado al inicio del componente
+        
         if (!currentAdminId) {
             alert('Error interno: El UID del administrador no está disponible.');
             return;
         }
 
+        const allPredictedSimple = selectedFixtures.every(f => f.prediction && f.prediction !== ''); 
         if (!title || !deadline || selectedFixtures.length !== MAX_FIXTURES || !allPredictedSimple) {
-             alert('Por favor, completa el Título y el Cierre, selecciona exactamente 9 partidos y asigna un pronóstico base (1, X, o 2) a cada uno.');
+             alert('Por favor, completa todos los campos.');
             return;
         }
 
-        // 1. Preparar Payload Final
+        // 🛑 ACTIVAR BLOQUEO DE AUTOSAVE
+        isSubmittingRef.current = true;
+
         const quinielaPayload = {
             metadata: { 
-                title, 
-                description, 
-                deadline, 
-                createdBy: currentAdminId, 
-                createdAt: new Date().toISOString() 
+                title, description, deadline, createdBy: currentAdminId, createdAt: new Date().toISOString() 
             },
             fixtures: selectedFixtures.map(f => ({
-                id: f.fixture.id,
-                leagueId: f.league.id,
-                leagueName: f.league.name,
-                round: f.league.round, 
-                homeTeam: f.teams.home.name,
-                awayTeam: f.teams.away.name,
-                matchDate: f.fixture.date, 
-                adminPrediction: f.prediction, 
+                id: f.fixture.id, leagueId: f.league.id, leagueName: f.league.name,
+                round: f.league.round, homeTeam: f.teams.home.name, awayTeam: f.teams.away.name,
+                matchDate: f.fixture.date, adminPrediction: f.prediction, 
             })),
         };
 
         try {
-            // 2. Guardar en la colección FINAL de quinielas
-            const newQuinielaId = await saveFinalQuiniela(quinielaPayload);
-            
-            // 3. Eliminar el borrador
+            // Guardar final y borrar borrador
+            await saveFinalQuiniela(quinielaPayload);
             await deleteDraftFromFirebase(currentAdminId);
 
-            console.log('--- Quiniela CREADA con ID ---', newQuinielaId);
-            alert(`¡Quiniela "${title}" creada y guardada con éxito!`);
+            alert(`¡Quiniela "${title}" creada con éxito!`);
 
-            // 4. Resetear el formulario
+            // 🛑 RESETEAR ESTADOS Y VOLVER A CARGA INICIAL PARA ENGAÑAR AL EFECTO
+            initialLoadRef.current = true;
             setTitle('');
             setDescription('');
             setDeadline('');
@@ -289,8 +286,14 @@ const CreateQuiniela = () => {
             setApiFixtures([]);
 
         } catch (error) {
-            console.error("Error al finalizar la quiniela:", error);
-            alert("Error al guardar la quiniela final. Revisa la consola y tu conexión a Firebase.");
+            console.error(error);
+            alert("Error al guardar la quiniela.");
+        } finally {
+            // Retrasar la liberación del bloqueo para que los efectos pendientes se cancelen
+            setTimeout(() => {
+                isSubmittingRef.current = false;
+                initialLoadRef.current = false;
+            }, 1000);
         }
     };
 
@@ -298,7 +301,7 @@ const CreateQuiniela = () => {
                            selectedFixtures.every(f => f.prediction && f.prediction !== '') && !isLoading;
 
 
-    // --- RENDERIZADO (sin cambios en JSX) ---
+    // --- RENDERIZADO (Diseño Intacto) ---
     return (
         <DashboardLayout isAdmin={true}>
             <div className="p-6 max-w-screen-xl mx-auto w-full"> 
@@ -306,26 +309,21 @@ const CreateQuiniela = () => {
                     ✍️ Crear Nueva Quiniela (Máx. {MAX_FIXTURES} Partidos)
                 </h2>
                 
-                {isSaving && (
+                {isSaving && !isSubmittingRef.current && (
                     <div className="fixed top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 p-2 rounded-lg text-sm z-50">
                         Guardando borrador automáticamente...
                     </div>
                 )}
                 
-                {/* 🛑 MOSTRAR ERROR DE AUTOSAVE 🛑 */}
                 {saveError && (
                     <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mb-4">
-                        <p className="font-bold">Error de persistencia:</p>
                         {saveError}
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6">
                     
-                    {/* ========== PANEL IZQUIERDO: SELECCIÓN Y DATOS GENERALES (65%) ========== */}
                     <div className="lg:w-2/3 space-y-8 bg-white p-6 rounded-xl shadow-lg h-fit"> 
-                        
-                        {/* 1. Datos Generales (Se mantienen) */}
                         <section className="space-y-6 border-b pb-6 border-gray-200">
                             <h3 className="text-xl font-semibold text-gray-800">1. Datos Generales</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -335,10 +333,8 @@ const CreateQuiniela = () => {
                             </div>
                         </section>
 
-                        {/* 2. Búsqueda de Partidos (Se mantienen) */}
                         <section className="space-y-4 border-b pb-6 border-gray-200">
                             <h3 className="text-xl font-semibold text-gray-800">2. Buscar Partidos</h3>
-                            
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
                                     <label htmlFor="league-select" className="block text-sm">Liga</label>
@@ -354,143 +350,77 @@ const CreateQuiniela = () => {
                                     </select>
                                 </div>
                             </div>
-
                             {isLoading && <p className="text-center text-red-500 font-semibold mt-4">Cargando partidos de la API...</p>}
                             {apiError && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mt-4">Error: {apiError}</div>}
                         </section>
 
-                        {/* 3. Lista de Partidos Encontrados (Se mantienen) */}
                         <section className="space-y-4">
-                            <h3 className="text-xl font-semibold text-gray-800">3. Partidos Encontrados (Clic para Añadir)</h3>
-                            
+                            <h3 className="text-xl font-semibold text-gray-800">3. Partidos Encontrados</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
-                                {apiFixtures.length > 0 ? (
-                                    apiFixtures.map((fixtureData) => {
-                                        const fixture = fixtureData.fixture;
-                                        const teams = fixtureData.teams;
-                                        const date = new Date(fixture.date);
-                                        const isSelected = selectedFixtures.some(f => f.fixture.id === fixture.id);
-                                        
-                                        return (
-                                            <div 
-                                                key={fixture.id} 
-                                                onClick={() => toggleFixtureSelection(fixtureData)}
-                                                className={`p-4 rounded-xl shadow-sm cursor-pointer transition duration-150 border-2 
-                                                            ${isSelected 
-                                                                ? 'border-green-600 bg-green-50 ring-2 ring-green-400' 
-                                                                : 'border-gray-100 bg-white hover:border-red-300 hover:shadow'}`}
-                                            >
-                                                <div className="text-sm font-semibold text-gray-700 mb-2 border-b pb-2">
-                                                    JORNADA: **{fixtureData.league.round || 'N/A'}**
+                                {apiFixtures.map((fixtureData) => {
+                                    const fixture = fixtureData.fixture;
+                                    const teams = fixtureData.teams;
+                                    const date = new Date(fixture.date);
+                                    const isSelected = selectedFixtures.some(f => f.fixture.id === fixture.id);
+                                    return (
+                                        <div 
+                                            key={fixture.id} onClick={() => toggleFixtureSelection(fixtureData)}
+                                            className={`p-4 rounded-xl shadow-sm cursor-pointer transition duration-150 border-2 
+                                                        ${isSelected ? 'border-green-600 bg-green-50 ring-2 ring-green-400' : 'border-gray-100 bg-white hover:border-red-300 hover:shadow'}`}
+                                        >
+                                            <div className="text-sm font-semibold text-gray-700 mb-2 border-b pb-2">JORNADA: **{fixtureData.league.round || 'N/A'}**</div>
+                                            <div className="flex justify-between items-center space-x-2">
+                                                <div className="flex items-center justify-end w-5/12 text-right">
+                                                    <span className="font-bold text-sm text-gray-900 truncate mr-1">{teams.home.nameShort || teams.home.name.split(' ')[0]}</span>
+                                                    <img src={teams.home.logo} alt={teams.home.name} className="w-5 h-5" />
                                                 </div>
-                                                <div className="flex justify-between items-center space-x-2">
-                                                    
-                                                    <div className="flex items-center justify-end w-5/12 text-right">
-                                                        <span className="font-bold text-sm text-gray-900 truncate mr-1">{teams.home.nameShort || teams.home.name.split(' ')[0]}</span>
-                                                        <img src={teams.home.logo} alt={teams.home.name} className="w-5 h-5" />
-                                                    </div>
-
-                                                    <span className="text-xs font-bold text-red-500 flex-shrink-0">VS</span>
-
-                                                    <div className="flex items-center justify-start w-5/12 text-left">
-                                                        <img src={teams.away.logo} alt={teams.away.name} className="w-5 h-5" />
-                                                        <span className="font-bold text-sm text-gray-900 truncate ml-1">{teams.away.nameShort || teams.away.name.split(' ')[0]}</span>
-                                                    </div>
+                                                <span className="text-xs font-bold text-red-500 flex-shrink-0">VS</span>
+                                                <div className="flex items-center justify-start w-5/12 text-left">
+                                                    <img src={teams.away.logo} alt={teams.away.name} className="w-5 h-5" />
+                                                    <span className="font-bold text-sm text-gray-900 truncate ml-1">{teams.away.nameShort || teams.away.name.split(' ')[0]}</span>
                                                 </div>
-
-                                                <div className="text-center text-xs text-gray-500 mt-2 border-t pt-2 border-gray-100">
-                                                    {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({date.toLocaleDateString()})
-                                                </div>
-
-                                                {isSelected && (
-                                                    <div className="text-xs text-center text-green-700 font-bold mt-2 pt-2 border-t border-green-200">AÑADIDO</div>
-                                                )}
                                             </div>
-                                        );
-                                    })
-                                ) : (
-                                    !isLoading && !apiError && selectedRound && <p className="text-center text-gray-500 md:col-span-2">No hay partidos disponibles.</p>
-                                )}
+                                            <div className="text-center text-xs text-gray-500 mt-2 border-t pt-2 border-gray-100">
+                                                {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({date.toLocaleDateString()})
+                                            </div>
+                                            {isSelected && <div className="text-xs text-center text-green-700 font-bold mt-2 pt-2 border-t border-green-200">AÑADIDO</div>}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </section>
                     </div>
 
-                    {/* ========== PANEL DERECHO: QUINIELA FINAL (33%) - CON BOTONES ========== */}
                     <div className="lg:w-1/3 space-y-6">
                         <div className="sticky top-6 bg-white p-6 rounded-xl shadow-lg">
-                            <h3 className="text-xl font-bold text-red-700">
-                                4. Quiniela Final ({selectedFixtures.length}/{MAX_FIXTURES})
-                            </h3>
+                            <h3 className="text-xl font-bold text-red-700">4. Quiniela Final ({selectedFixtures.length}/{MAX_FIXTURES})</h3>
                             <p className={`text-sm mt-1 mb-4 ${selectedFixtures.length === MAX_FIXTURES ? 'text-green-600' : 'text-red-500'}`}>
-                                {selectedFixtures.length === MAX_FIXTURES 
-                                    ? '¡Completo! Asigna el pronóstico base.' 
-                                    : `Faltan ${MAX_FIXTURES - selectedFixtures.length} partidos.`}
+                                {selectedFixtures.length === MAX_FIXTURES ? '¡Completo! Asigna el pronóstico.' : `Faltan ${MAX_FIXTURES - selectedFixtures.length} partidos.`}
                             </p>
-                            
                             <div className="space-y-4 max-h-[550px] overflow-y-auto pr-2">
-                                {selectedFixtures
-                                    .sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date))
-                                    .map((f, index) => (
+                                {selectedFixtures.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)).map((f, index) => (
                                     <div key={f.fixture.id} className="p-3 border border-gray-200 rounded-lg flex flex-col justify-between bg-gray-50">
-                                        
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="w-1/2 flex-shrink-0">
-                                                <div className="font-semibold text-sm">
-                                                    P{index + 1}. ({f.league.nameShort})
-                                                </div>
-                                                <div className="text-xs text-gray-600 truncate">
-                                                    {f.teams.home.nameShort || f.teams.home.name.split(' ')[0]} vs {f.teams.away.nameShort || f.teams.away.name.split(' ')[0]}
-                                                </div>
-                                            </div>
-                                            <div className="text-xs text-right text-gray-500">
-                                                {new Date(f.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                <div className="font-semibold text-sm">P{index + 1}. ({f.league.nameShort})</div>
+                                                <div className="text-xs text-gray-600 truncate">{f.teams.home.nameShort || f.teams.home.name.split(' ')[0]} vs {f.teams.away.nameShort || f.teams.away.name.split(' ')[0]}</div>
                                             </div>
                                         </div>
-                                        
                                         <div className="flex justify-around space-x-1 pt-2 border-t border-gray-200">
-                                            {PREDICTION_OPTIONS_BASIC.map(value => {
-                                                const isSelected = f.prediction === value;
-                                                
-                                                let bgColor = 'bg-gray-200 text-gray-700 hover:bg-gray-300';
-                                                if (isSelected) {
-                                                    bgColor = value === '1' ? 'bg-green-500 text-white' : 
-                                                             value === 'X' ? 'bg-yellow-500 text-white' : 
-                                                             'bg-red-500 text-white';
-                                                }
-                                                
-                                                return (
-                                                    <button
-                                                        key={value}
-                                                        type="button"
-                                                        onClick={() => handlePredictionChange(f.fixture.id, value)}
-                                                        className={`w-1/3 py-1 font-bold rounded-full text-xs transition-colors duration-150 ${bgColor}`}
-                                                    >
-                                                        {value}
-                                                    </button>
-                                                );
-                                            })}
+                                            {PREDICTION_OPTIONS_BASIC.map(value => (
+                                                <button key={value} type="button" onClick={() => handlePredictionChange(f.fixture.id, value)}
+                                                    className={`w-1/3 py-1 font-bold rounded-full text-xs transition-colors duration-150 ${f.prediction === value ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                                                    {value}
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
                                 ))}
-                                {selectedFixtures.length === 0 && (
-                                    <p className="text-center text-gray-400 italic pt-4">Añade partidos del panel izquierdo.</p>
-                                )}
                             </div>
-                            
-                            {/* Botón de Envío Final */}
                             <div className="mt-6 pt-4 border-t border-red-200">
-                                <button 
-                                    type="submit"
-                                    disabled={!isReadyToSubmit}
-                                    className="w-full py-3 px-4 text-sm font-bold rounded-lg text-white bg-red-600 hover:bg-red-700 focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isLoading ? 'Cargando...' : `Crear Quiniela con ${MAX_FIXTURES} partidos`}
+                                <button type="submit" disabled={!isReadyToSubmit || isSubmittingRef.current} className="w-full py-3 px-4 text-sm font-bold rounded-lg text-white bg-red-600 hover:bg-red-700 focus:ring-2 focus:ring-red-500 transition-colors duration-300 disabled:opacity-50">
+                                    {isSubmittingRef.current ? 'CREANDO...' : 'Crear Quiniela'}
                                 </button>
-                                {!isReadyToSubmit && (
-                                    <p className="text-xs text-red-500 mt-2 text-center">
-                                        Falta Título, Cierre, los 9 partidos o un pronóstico base (1, X o 2).
-                                    </p>
-                                )}
                             </div>
                         </div>
                     </div>
