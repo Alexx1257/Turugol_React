@@ -1,8 +1,8 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/Login';
+import RegisterPage from './pages/Register';
 import UserDashboardPage from './pages/user/Dashboard'; 
 import AdminDashboardPage from './pages/admin/Dashboard';
 import CreateQuiniela from './pages/admin/CreateQuiniela';
