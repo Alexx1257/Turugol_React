@@ -3,22 +3,20 @@ import DashboardLayout from '../../components/DashboardLayout';
 // 🛑 Importar tu configuración de Firebase
 import { db, auth } from '../../firebase/config'; 
 import { doc, setDoc, getDoc, deleteDoc, collection } from 'firebase/firestore'; 
-// Si necesitas el UID del usuario autenticado, asegúrate de que 'auth' está importado.
+
 
 // --- CONSTANTES DE FIREBASE Y SESIÓN ---
 const QUINIELA_BORRADORES_COLLECTION = "quinielaBorradores";
 const QUINIELAS_FINAL_COLLECTION = "quinielas";
 // ------------------------------------------
 
-// --- CONFIGURACIÓN API-FOOTBALL ---
+// --- CONFIGURACIÓN API-FOOTBALL (Se mantiene) ---
 const API_BASE_URL = '/api-football/fixtures';
 const SEASON_YEAR = 2025;
 const MAX_FIXTURES = 9;
-
-// Opciones de Pronóstico (Base de la Quiniela)
 const PREDICTION_OPTIONS_BASIC = ['1', 'X', '2'];
 
-// --- DATOS SIMULADOS PARA SELECCIÓN DE LIGA Y JORNADA ---
+// --- DATOS SIMULADOS (Se mantiene) ---
 const DUMMY_LEAGUES = [
     { id: 140, name: 'LaLiga (España)', nameShort: 'LALIGA' },
     { id: 39, name: 'Premier League (Inglaterra)', nameShort: 'PREMIER' },
@@ -32,12 +30,12 @@ const DUMMY_ROUNDS = [
 
 
 const CreateQuiniela = () => {
-    // 🛑 SIMULACIÓN DEL UID DEL ADMIN (REEMPLAZAR CON LÓGICA REAL DE AUTH)
-    // Usamos un estado para el ID del admin, obtenido de tu consola:
-    const [adminId, setAdminId] = useState('3LYBT43967WKqFfY1ZpsWGNVrO33');
-    // En producción: Usa un useEffect o custom hook para obtener auth.currentUser.uid
+    // 🛑 OBTENEMOS EL UID REAL DEL USUARIO AUTENTICADO 🛑
+    // Nota: Si este componente se renderiza, la ruta ya está protegida, por lo que user no debería ser null.
+    const user = auth.currentUser; 
+    const currentAdminId = user ? user.uid : null; // UID real
 
-    // ESTADO DEL FORMULARIO
+    // ESTADO DEL FORMULARIO (Se mantiene)
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [deadline, setDeadline] = useState(''); 
@@ -46,15 +44,16 @@ const CreateQuiniela = () => {
     const [apiFixtures, setApiFixtures] = useState([]); 
     const [selectedFixtures, setSelectedFixtures] = useState([]); 
     
-    // ESTADO DE LA INTERFAZ
+    // ESTADO DE LA INTERFAZ (Se mantiene)
     const [isLoading, setIsLoading] = useState(false);
     const [apiError, setApiError] = useState(null);
     const [isSaving, setIsSaving] = useState(false); 
+    const [saveError, setSaveError] = useState(null); // Nuevo estado para errores de guardado
 
     const initialLoadRef = useRef(true); 
 
     // ----------------------------------------------------------------------------------
-    // 🛑 FUNCIONES REALES DE FIREBASE (Aisladas) 🛑
+    // 🛑 FUNCIONES REALES DE FIREBASE (Se mantienen) 🛑
     // ----------------------------------------------------------------------------------
 
     const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
@@ -84,15 +83,15 @@ const CreateQuiniela = () => {
 
 
     // =========================================================
-    // 🛑 EFECTO 1: CARGAR BORRADOR AL INICIO (usa adminId)
+    // 🛑 EFECTO 1: CARGAR BORRADOR AL INICIO (Usa currentAdminId)
     // =========================================================
     useEffect(() => {
-        // Solo intentamos cargar si tenemos el ID del administrador
-        if (!adminId) return;
+        // Solo intentamos cargar si tenemos el ID del administrador real
+        if (!currentAdminId) return;
 
         const loadInitialDraft = async () => {
             try {
-                const draft = await loadDraftFromFirebase(adminId);
+                const draft = await loadDraftFromFirebase(currentAdminId);
                 if (draft) {
                     setTitle(draft.title || '');
                     setDescription(draft.description || '');
@@ -102,20 +101,25 @@ const CreateQuiniela = () => {
                     setSelectedRound(draft.selectedRound || ''); 
                 }
             } catch (error) {
+                // Si hay un error de carga (ej. red lenta o permisos)
                 console.error("Error al cargar el borrador:", error);
+                setSaveError("Fallo al cargar borrador: " + error.message);
             }
             initialLoadRef.current = false;
         };
 
         loadInitialDraft();
-    }, [adminId]); // Dependencia del ID de administrador
+    }, [currentAdminId]); 
 
     // =========================================================
-    // 🛑 EFECTO 2: AUTOSAVE DEL BORRADOR (usa adminId)
+    // 🛑 EFECTO 2: AUTOSAVE DEL BORRADOR (CORRECCIÓN DE ERRORES)
     // =========================================================
     useEffect(() => {
-        if (initialLoadRef.current || !adminId) return;
-
+        // Bloquear si es la carga inicial o si no hay UID real
+        if (initialLoadRef.current || !currentAdminId) return; 
+        
+        // Limpiar errores previos al guardar
+        setSaveError(null);
         setIsSaving(true);
         
         const draftData = {
@@ -125,19 +129,24 @@ const CreateQuiniela = () => {
         const timer = setTimeout(async () => {
             if (title || selectedFixtures.length > 0) {
                 try {
-                    await saveDraftToFirebase(draftData, adminId);
+                    // 🛑 USAMOS EL UID REAL DEL ADMIN 🛑
+                    await saveDraftToFirebase(draftData, currentAdminId);
+                    console.log(`Autosave exitoso para UID: ${currentAdminId}`);
+
                 } catch (error) {
+                    // 🛑 CAPTURA EXPLÍCITA DE ERRORES DE ESCRITURA 🛑
                     console.error("Fallo al guardar borrador:", error);
+                    setSaveError(`Fallo de Autosave: ${error.message}. (Verifica reglas de quinielaBorradores)`);
                 }
             }
             setIsSaving(false);
         }, 1500); 
 
         return () => clearTimeout(timer); 
-    }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, adminId]);
+    }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, currentAdminId]);
     
     
-    // --- MANEJADORES DE ESTADO (sin cambios en la lógica) ---
+    // --- MANEJADORES DE ESTADO (Se mantienen) ---
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         if (name === 'title') setTitle(value);
@@ -189,7 +198,7 @@ const CreateQuiniela = () => {
         );
     };
 
-    // --- FETCH DE DATOS DE LA API (sin cambios) ---
+    // --- FETCH DE DATOS DE LA API (Se mantiene) ---
     const fetchFixtures = useCallback(async (leagueId, roundName) => {
         if (!leagueId || !roundName) return;
         setIsLoading(true);
@@ -229,9 +238,10 @@ const CreateQuiniela = () => {
         e.preventDefault();
         const allPredictedSimple = selectedFixtures.every(f => f.prediction && f.prediction !== ''); 
 
-        if (!adminId) {
-             alert('Error: El usuario administrador no está autenticado.');
-             return;
+        // Ya validamos que el usuario esté logueado al inicio del componente
+        if (!currentAdminId) {
+            alert('Error interno: El UID del administrador no está disponible.');
+            return;
         }
 
         if (!title || !deadline || selectedFixtures.length !== MAX_FIXTURES || !allPredictedSimple) {
@@ -245,7 +255,7 @@ const CreateQuiniela = () => {
                 title, 
                 description, 
                 deadline, 
-                createdBy: adminId, 
+                createdBy: currentAdminId, 
                 createdAt: new Date().toISOString() 
             },
             fixtures: selectedFixtures.map(f => ({
@@ -265,7 +275,7 @@ const CreateQuiniela = () => {
             const newQuinielaId = await saveFinalQuiniela(quinielaPayload);
             
             // 3. Eliminar el borrador
-            await deleteDraftFromFirebase(adminId);
+            await deleteDraftFromFirebase(currentAdminId);
 
             console.log('--- Quiniela CREADA con ID ---', newQuinielaId);
             alert(`¡Quiniela "${title}" creada y guardada con éxito!`);
@@ -280,7 +290,7 @@ const CreateQuiniela = () => {
 
         } catch (error) {
             console.error("Error al finalizar la quiniela:", error);
-            alert("Error al guardar la quiniela. Revisa la consola y tu conexión a Firebase.");
+            alert("Error al guardar la quiniela final. Revisa la consola y tu conexión a Firebase.");
         }
     };
 
@@ -302,12 +312,20 @@ const CreateQuiniela = () => {
                     </div>
                 )}
                 
+                {/* 🛑 MOSTRAR ERROR DE AUTOSAVE 🛑 */}
+                {saveError && (
+                    <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mb-4">
+                        <p className="font-bold">Error de persistencia:</p>
+                        {saveError}
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6">
                     
                     {/* ========== PANEL IZQUIERDO: SELECCIÓN Y DATOS GENERALES (65%) ========== */}
                     <div className="lg:w-2/3 space-y-8 bg-white p-6 rounded-xl shadow-lg h-fit"> 
                         
-                        {/* 1. Datos Generales */}
+                        {/* 1. Datos Generales (Se mantienen) */}
                         <section className="space-y-6 border-b pb-6 border-gray-200">
                             <h3 className="text-xl font-semibold text-gray-800">1. Datos Generales</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -317,7 +335,7 @@ const CreateQuiniela = () => {
                             </div>
                         </section>
 
-                        {/* 2. Búsqueda de Partidos */}
+                        {/* 2. Búsqueda de Partidos (Se mantienen) */}
                         <section className="space-y-4 border-b pb-6 border-gray-200">
                             <h3 className="text-xl font-semibold text-gray-800">2. Buscar Partidos</h3>
                             
@@ -341,7 +359,7 @@ const CreateQuiniela = () => {
                             {apiError && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mt-4">Error: {apiError}</div>}
                         </section>
 
-                        {/* 3. Lista de Partidos Encontrados (Scroll Implementado) */}
+                        {/* 3. Lista de Partidos Encontrados (Se mantienen) */}
                         <section className="space-y-4">
                             <h3 className="text-xl font-semibold text-gray-800">3. Partidos Encontrados (Clic para Añadir)</h3>
                             
