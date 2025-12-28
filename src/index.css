@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+.hero-container {
+  min-height: 85vh;
+}
+
+.carousel-column {
+  height: 100%;
+}
+
+.carousel-slide {
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+.carousel-overlay {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.input-focus:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.password-strength {
+  height: 4px;
+  transition: all 0.3s ease;
+}
