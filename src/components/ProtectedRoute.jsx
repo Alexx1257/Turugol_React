@@ -15,14 +15,15 @@ const ProtectedRoute = ({ requiredRole }) => {
         );
     }
 
-    if (!user) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
-    }
-
     // Solo verificamos el rol si la carga terminó (loadingRole es false arriba)
+    // Si el rol no coincide (incluyendo si es 'guest' por logout), mandamos al Home directamente
     if (requiredRole && role !== requiredRole) {
         console.warn(`Acceso denegado. Rol requerido: ${requiredRole}, Rol actual: ${role}`);
         return <Navigate to="/" replace />;
+    }
+
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
     return <Outlet />;
