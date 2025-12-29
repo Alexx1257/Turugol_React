@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../firebase/config';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import PaymentSettingsForm from './PaymentSettingsForm'; // Importación del nuevo componente
 
 const StatCard = ({ title, value, icon, color, subtext, loading }) => {
-
     const safeColor = color || "text-gray-500 bg-gray-500";
     const textColorClass = safeColor.split(' ').find(cls => cls.startsWith('text-')) || "text-gray-500";
 
@@ -83,7 +83,6 @@ const AdminDashboardPage = () => {
     }, []);
 
     const handleShareWhatsApp = (quiniela) => {
-        
         const link = `${window.location.origin}/dashboard/user/play/${quiniela.id}`;
         const message = `¡Hola! Te invito a participar en la quiniela "${quiniela.metadata?.title || 'TuruGol'}". ⚽🏆\n\nIngresa tus pronósticos aquí: ${link}`;
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -99,7 +98,6 @@ const AdminDashboardPage = () => {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8">
-            
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800">Panel de Control</h2>
@@ -202,44 +200,49 @@ const AdminDashboardPage = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-fit">
-                    <h3 className="font-bold text-gray-800 mb-4">Acciones Rápidas</h3>
-                    <div className="space-y-3">
-                        <Link to="/dashboard/admin/create" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition-all group">
-                            <div className="flex items-center">
-                                <div className="bg-blue-100 text-blue-600 p-2 rounded-md mr-3 group-hover:bg-blue-200 transition-colors">
-                                    <i className="fas fa-plus"></i>
-                                </div>
-                                <div>
-                                    <p className="font-semibold text-gray-700 text-sm">Crear Quiniela</p>
-                                    <p className="text-xs text-gray-500">Configurar nuevos partidos</p>
-                                </div>
-                            </div>
-                        </Link>
+                <div className="space-y-6">
+                    {/* LLAMADA AL NUEVO COMPONENTE SEPARADO */}
+                    <PaymentSettingsForm />
 
-                        <Link to="/dashboard/admin/manage" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-purple-50 hover:border-purple-200 transition-all group">
-                            <div className="flex items-center">
-                                <div className="bg-purple-100 text-purple-600 p-2 rounded-md mr-3 group-hover:bg-purple-200 transition-colors">
-                                    <i className="fas fa-edit"></i>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-fit">
+                        <h3 className="font-bold text-gray-800 mb-4">Acciones Rápidas</h3>
+                        <div className="space-y-3">
+                            <Link to="/dashboard/admin/create" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                                <div className="flex items-center">
+                                    <div className="bg-blue-100 text-blue-600 p-2 rounded-md mr-3 group-hover:bg-blue-200 transition-colors">
+                                        <i className="fas fa-plus"></i>
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-gray-700 text-sm">Crear Quiniela</p>
+                                        <p className="text-xs text-gray-500">Configurar nuevos partidos</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="font-semibold text-gray-700 text-sm">Ingresar Resultados</p>
-                                    <p className="text-xs text-gray-500">Cerrar marcadores y jornadas</p>
-                                </div>
-                            </div>
-                        </Link>
+                            </Link>
 
-                        <Link to="/dashboard/admin/users" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-orange-50 hover:border-orange-200 transition-all group">
-                            <div className="flex items-center">
-                                <div className="bg-orange-100 text-orange-600 p-2 rounded-md mr-3 group-hover:bg-orange-200 transition-colors">
-                                    <i className="fas fa-users"></i>
+                            <Link to="/dashboard/admin/manage" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-purple-50 hover:border-purple-200 transition-all group">
+                                <div className="flex items-center">
+                                    <div className="bg-purple-100 text-purple-600 p-2 rounded-md mr-3 group-hover:bg-purple-200 transition-colors">
+                                        <i className="fas fa-edit"></i>
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-gray-700 text-sm">Ingresar Resultados</p>
+                                        <p className="text-xs text-gray-500">Cerrar marcadores y jornadas</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="font-semibold text-gray-700 text-sm">Gestionar Usuarios</p>
-                                    <p className="text-xs text-gray-500">Revisar roles y bloqueos</p>
+                            </Link>
+
+                            <Link to="/dashboard/admin/users" className="block w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-orange-50 hover:border-orange-200 transition-all group">
+                                <div className="flex items-center">
+                                    <div className="bg-orange-100 text-orange-600 p-2 rounded-md mr-3 group-hover:bg-orange-200 transition-colors">
+                                        <i className="fas fa-users"></i>
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-gray-700 text-sm">Gestionar Usuarios</p>
+                                        <p className="text-xs text-gray-500">Revisar roles y bloqueos</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </Link>
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </div>

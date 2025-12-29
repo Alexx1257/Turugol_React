@@ -128,6 +128,8 @@ const ParticipantsManager = () => {
                         <thead className="bg-gray-50 border-b border-gray-100">
                             <tr>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Usuario</th>
+                                {/* NUEVA COLUMNA REFERENCIA UID */}
+                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Ref (UID)</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha Registro</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Puntos</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Estado de Pago</th>
@@ -137,7 +139,7 @@ const ParticipantsManager = () => {
                         <tbody className="divide-y divide-gray-100">
                             {entries.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="p-8 text-center text-gray-400">
+                                    <td colSpan="6" className="p-8 text-center text-gray-400">
                                         <i className="fas fa-user-slash text-3xl mb-3 block opacity-30"></i>
                                         No hay usuarios inscritos en esta quiniela aún.
                                     </td>
@@ -148,6 +150,8 @@ const ParticipantsManager = () => {
                                     const email = entry.email || 'Sin correo';
                                     const isPaid = entry.paymentStatus === 'paid';
                                     const date = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '-';
+                                    // EXTRAER PRIMEROS 6 CARACTERES DEL UID (userId)
+                                    const shortUID = entry.userId ? entry.userId.substring(0, 6).toUpperCase() : 'N/A';
 
                                     return (
                                         <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -162,6 +166,13 @@ const ParticipantsManager = () => {
                                                         <div className="text-xs text-gray-500">{email}</div>
                                                     </div>
                                                 </div>
+                                            </td>
+
+                                            {/* Referencia (UID) */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-bold border border-gray-200">
+                                                    {shortUID}
+                                                </span>
                                             </td>
 
                                             {/* Fecha */}
