@@ -222,9 +222,16 @@ const ResultsManager = () => {
                     Object.keys(data.predictions).forEach(fixtureId => {
                         const userPick = data.predictions[fixtureId]; 
                         const actualOutcome = officialOutcomes[fixtureId];
-                        // Lógica simple: Acierto directo = 1 punto
-                        if (userPick && actualOutcome && userPick === actualOutcome) {
-                            userPoints += 1; 
+                        
+                        // MODIFICACIÓN: Lógica de acierto compatible con Arrays (Dobles/Triples)
+                        if (userPick && actualOutcome) {
+                            const isHit = Array.isArray(userPick) 
+                                ? userPick.includes(actualOutcome) 
+                                : userPick === actualOutcome;
+
+                            if (isHit) {
+                                userPoints += 1; 
+                            }
                         }
                     });
                 }

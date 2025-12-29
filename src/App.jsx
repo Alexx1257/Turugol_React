@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'; // Agregamos Navigat
 import Home from './pages/Home';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword'; // [NUEVO] Importación recuperación
 
 // Layouts
 import AdminLayout from './layouts/AdminLayout';
@@ -38,6 +39,7 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} /> {/* [NUEVO] Ruta recuperación */}
 
                 {/* 2. RUTAS DE USUARIO */}
                 <Route element={<ProtectedRoute />}>

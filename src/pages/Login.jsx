@@ -75,13 +75,11 @@ const Login = () => {
 
             const role = snap.data().role; 
             
-            // MODIFICACIÓN: Retraso de 250ms para permitir la sincronización del estado global de autenticación
+            // 4. LÓGICA DE REDIRECCIÓN INTELIGENTE (Corregida con delay para sincronizar)
             setTimeout(() => {
                 if (from) {
-                    // Si el usuario intentó entrar a un link específico antes de loguearse
                     navigate(from, { replace: true });
                 } else {
-                    // Redirección absoluta basada en el rol para evitar conflictos de sesión
                     const redirectPath = role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
                     navigate(redirectPath, { replace: true }); 
                 }
@@ -89,12 +87,13 @@ const Login = () => {
             
         } catch (error) {
             handleFirebaseError(error);
-            setIsLoading(false); // Se asegura de detener el estado de carga en caso de error
+            setIsLoading(false);
         }
     };
 
     const handleForgotPassword = () => {
-        alert('Redirigiendo al formulario de recuperación de contraseña');
+        // Redirigimos a la página de recuperación
+        navigate('/forgot-password');
     };
 
     return (

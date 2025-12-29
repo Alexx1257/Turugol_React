@@ -83,7 +83,9 @@ const UserHistory = () => {
 
     const getResultColor = (userPick, officialOutcome) => {
         if (!officialOutcome) return 'bg-gray-100 text-gray-500 border-gray-200';
-        if (userPick === officialOutcome) return 'bg-green-100 text-green-700 border-green-200';
+        // MODIFICACIÓN: Soporte para array en la lógica de colores
+        const isHit = Array.isArray(userPick) ? userPick.includes(officialOutcome) : userPick === officialOutcome;
+        if (isHit) return 'bg-green-100 text-green-700 border-green-200';
         return 'bg-red-50 text-red-600 border-red-100 opacity-75';
     };
 
@@ -190,10 +192,12 @@ const UserHistory = () => {
 
                                 <div className="max-h-[40vh] md:max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                                     {selectedQuinielaDetails.fixtures.map((fixture) => {
-                                        const userPick = selectedParticipation.predictions[fixture.id];
+                                        // MODIFICACIÓN: Las predicciones ahora son arrays
+                                        const userPicks = selectedParticipation.predictions[fixture.id] || [];
                                         const officialOutcome = fixture.outcome;
-                                        const isHit = userPick === officialOutcome;
-                                        const statusClass = getResultColor(userPick, officialOutcome);
+                                        // MODIFICACIÓN: Comprobar si el resultado oficial está dentro de los picks del usuario
+                                        const isHit = officialOutcome && Array.isArray(userPicks) && userPicks.includes(officialOutcome);
+                                        const statusClass = getResultColor(userPicks, officialOutcome);
 
                                         return (
                                             <div key={fixture.id} className={`grid grid-cols-12 gap-2 items-center p-3 rounded-xl border ${statusClass}`}>
@@ -207,8 +211,13 @@ const UserHistory = () => {
                                                         <span className={`text-[10px] md:text-xs font-bold truncate ${officialOutcome === 'AWAY' ? 'text-gray-900' : 'text-gray-500'}`}>{fixture.awayTeam}</span>
                                                     </div>
                                                 </div>
-                                                <div className="col-span-3 flex flex-col items-center justify-center">
-                                                    <span className="text-[10px] md:text-xs font-black uppercase text-gray-700">{translatePick(userPick)}</span>
+                                                <div className="col-span-3 flex flex-col items-center justify-center text-center">
+                                                    {/* MODIFICACIÓN: Formatear múltiples picks con translatePick */}
+                                                    <span className="text-[10px] md:text-xs font-black uppercase text-gray-700 leading-tight">
+                                                        {Array.isArray(userPicks) 
+                                                            ? userPicks.map(p => translatePick(p)).join(' / ') 
+                                                            : translatePick(userPicks)}
+                                                    </span>
                                                 </div>
                                                 <div className="col-span-3 flex flex-col items-center justify-center text-center">
                                                     {officialOutcome ? (
