@@ -107,9 +107,12 @@ const UserHistory = () => {
                                     Q
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
+                                    {/* Insignia Estado Juego */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.status === 'finalized' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}>
                                         {part.status === 'finalized' ? 'FINALIZADA' : 'EN JUEGO'}
                                     </span>
+                                    
+                                    {/* Insignia Estado PAGO */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                         {part.paymentStatus === 'paid' ? 'PAGADO $$' : 'PAGO PENDIENTE'}
                                     </span>
@@ -124,6 +127,7 @@ const UserHistory = () => {
                                     <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Aciertos</p>
                                     <p className="text-2xl font-black text-gray-800">{part.puntos !== undefined ? part.puntos : '-'}</p>
                                 </div>
+                                
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={() => navigate(`/dashboard/user/leaderboard/${part.quinielaId}`)}
@@ -157,12 +161,13 @@ const UserHistory = () => {
                             </button>
                         </div>
 
-                        {/* BANNER DE PAGO CONDICIONAL - REUTILIZADO */}
+                        {/* BANNER DE PAGO CONDICIONAL - REUTILIZADO CON hideButton={true} */}
                         {selectedParticipation.paymentStatus !== 'paid' && (
                             <div className="mb-8 transform scale-95 md:scale-100 origin-top">
                                 <PaymentBanner 
                                     totalCost={selectedParticipation.costo || 10} 
                                     onNavigate={closeDetails} 
+                                    hideButton={true}
                                 />
                             </div>
                         )}
