@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../../firebase/config';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
+// IMPORTACIÓN DEL COMPONENTE DE PAGO
+import PaymentBanner from '../admin/quinielas/PaymentBanner';
 
 const UserHistory = () => {
     const navigate = useNavigate();
     const [participaciones, setParticipaciones] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Estados para el Modal de Detalles
     const [selectedParticipation, setSelectedParticipation] = useState(null);
     const [selectedQuinielaDetails, setSelectedQuinielaDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
@@ -19,9 +20,8 @@ const UserHistory = () => {
                 const user = auth.currentUser;
                 if (!user) return;
 
-                // CORRECCIÓN: Consulta limpia usando 'createdAt' y ordenando directamente en Firestore
                 const q = query(
-                    collection(db, 'userEntries'), 
+                    collection(db, 'userEntries'),
                     where('userId', '==', user.uid),
                     orderBy('createdAt', 'desc')
                 );
@@ -32,9 +32,7 @@ const UserHistory = () => {
                 setParticipaciones(data);
             } catch (error) {
                 console.error("Error cargando historial:", error);
-                // Fallback: Si falla el índice, intentamos sin ordenamiento (solo por seguridad)
                 if (error.code === 'failed-precondition') {
-                    console.warn("Falta índice compuesto. Cargando sin orden y ordenando en cliente.");
                     try {
                          const qFallback = query(collection(db, 'userEntries'), where('userId', '==', auth.currentUser.uid));
                          const snapFallback = await getDocs(qFallback);
@@ -109,12 +107,9 @@ const UserHistory = () => {
                                     Q
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
-                                    {/* Insignia Estado Juego */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.status === 'finalized' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}>
                                         {part.status === 'finalized' ? 'FINALIZADA' : 'EN JUEGO'}
                                     </span>
-                                    
-                                    {/* Insignia Estado PAGO */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                         {part.paymentStatus === 'paid' ? 'PAGADO $$' : 'PAGO PENDIENTE'}
                                     </span>
@@ -129,12 +124,10 @@ const UserHistory = () => {
                                     <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Aciertos</p>
                                     <p className="text-2xl font-black text-gray-800">{part.puntos !== undefined ? part.puntos : '-'}</p>
                                 </div>
-                                
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={() => navigate(`/dashboard/user/leaderboard/${part.quinielaId}`)}
                                         className="px-3 py-2 bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100 rounded-xl text-sm font-bold transition-colors shadow-sm flex items-center gap-1"
-                                        title="Ver Ranking"
                                     >
                                         <i className="fas fa-trophy"></i>
                                     </button>
@@ -153,16 +146,26 @@ const UserHistory = () => {
 
             {selectedParticipation && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-                    <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl animate-fade-in my-8">
+                    <div className="bg-white rounded-3xl max-w-4xl w-full p-4 md:p-8 shadow-2xl animate-fade-in my-auto">
                         <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-800">Detalle de Pronósticos</h3>
                                 <p className="text-sm text-gray-500">{selectedParticipation.quinielaName}</p>
                             </div>
-                            <button onClick={closeDetails} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors">
+                            <button onClick={closeDetails} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500">
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>
+
+                        {/* BANNER DE PAGO CONDICIONAL - REUTILIZADO */}
+                        {selectedParticipation.paymentStatus !== 'paid' && (
+                            <div className="mb-8 transform scale-95 md:scale-100 origin-top">
+                                <PaymentBanner 
+                                    totalCost={selectedParticipation.costo || 10} 
+                                    onNavigate={closeDetails} 
+                                />
+                            </div>
+                        )}
 
                         {loadingDetails ? (
                             <div className="py-12 text-center text-gray-400">
@@ -180,7 +183,7 @@ const UserHistory = () => {
                                     <div className="col-span-1 text-center">Pts</div>
                                 </div>
 
-                                <div className="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                                <div className="max-h-[40vh] md:max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                                     {selectedQuinielaDetails.fixtures.map((fixture) => {
                                         const userPick = selectedParticipation.predictions[fixture.id];
                                         const officialOutcome = fixture.outcome;
@@ -192,32 +195,32 @@ const UserHistory = () => {
                                                 <div className="col-span-5 flex flex-col justify-center">
                                                     <div className="flex items-center gap-2 mb-1">
                                                         <img src={fixture.homeLogo} className="w-4 h-4 object-contain" alt="" />
-                                                        <span className={`text-xs font-bold truncate ${officialOutcome === 'HOME' ? 'text-gray-900' : 'text-gray-500'}`}>{fixture.homeTeam}</span>
+                                                        <span className={`text-[10px] md:text-xs font-bold truncate ${officialOutcome === 'HOME' ? 'text-gray-900' : 'text-gray-500'}`}>{fixture.homeTeam}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <img src={fixture.awayLogo} className="w-4 h-4 object-contain" alt="" />
-                                                        <span className={`text-xs font-bold truncate ${officialOutcome === 'AWAY' ? 'text-gray-900' : 'text-gray-500'}`}>{fixture.awayTeam}</span>
+                                                        <span className={`text-[10px] md:text-xs font-bold truncate ${officialOutcome === 'AWAY' ? 'text-gray-900' : 'text-gray-500'}`}>{fixture.awayTeam}</span>
                                                     </div>
                                                 </div>
                                                 <div className="col-span-3 flex flex-col items-center justify-center">
-                                                    <span className="text-xs font-black uppercase text-gray-700">{translatePick(userPick)}</span>
+                                                    <span className="text-[10px] md:text-xs font-black uppercase text-gray-700">{translatePick(userPick)}</span>
                                                 </div>
                                                 <div className="col-span-3 flex flex-col items-center justify-center text-center">
                                                     {officialOutcome ? (
                                                         <>
-                                                            <span className="text-xs font-bold text-gray-800">{translatePick(officialOutcome)}</span>
-                                                            <span className="text-[10px] text-gray-500 font-mono">({fixture.result?.home ?? '-'} - {fixture.result?.away ?? '-'})</span>
+                                                            <span className="text-[10px] md:text-xs font-bold text-gray-800">{translatePick(officialOutcome)}</span>
+                                                            <span className="text-[9px] text-gray-500 font-mono">({fixture.result?.home ?? '-'} - {fixture.result?.away ?? '-'})</span>
                                                         </>
                                                     ) : (
-                                                        <span className="text-xs text-gray-400 italic">Pendiente</span>
+                                                        <span className="text-[10px] md:text-xs text-gray-400 italic">Pendiente</span>
                                                     )}
                                                 </div>
                                                 <div className="col-span-1 flex items-center justify-center">
                                                     {officialOutcome ? (
                                                         isHit ? (
-                                                            <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center shadow-sm"><i className="fas fa-check text-xs"></i></div>
+                                                            <div className="w-5 h-5 md:w-6 md:h-6 bg-green-500 text-white rounded-full flex items-center justify-center shadow-sm"><i className="fas fa-check text-[10px]"></i></div>
                                                         ) : (
-                                                            <div className="w-6 h-6 bg-red-400 text-white rounded-full flex items-center justify-center shadow-sm opacity-50"><i className="fas fa-times text-xs"></i></div>
+                                                            <div className="w-5 h-5 md:w-6 md:h-6 bg-red-400 text-white rounded-full flex items-center justify-center shadow-sm opacity-50"><i className="fas fa-times text-[10px]"></i></div>
                                                         )
                                                     ) : (
                                                         <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
@@ -231,7 +234,7 @@ const UserHistory = () => {
                         )}
 
                         <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
-                            <button onClick={closeDetails} className="px-6 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 transition-colors">Cerrar</button>
+                            <button onClick={closeDetails} className="px-6 py-2 md:py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900">Cerrar</button>
                         </div>
                     </div>
                 </div>
