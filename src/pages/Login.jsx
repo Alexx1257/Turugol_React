@@ -75,21 +75,21 @@ const Login = () => {
 
             const role = snap.data().role; 
             
-            // 4. LÓGICA DE REDIRECCIÓN INTELIGENTE
-            if (from) {
-                // Si el usuario intentó entrar a un link específico antes de loguearse
-                // lo enviamos allí (ej: /dashboard/user/play/xyz)
-                navigate(from, { replace: true });
-            } else {
-                // Si entró directo al Login, lo enviamos a su panel correspondiente
-                const redirectPath = role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
-                navigate(redirectPath); 
-            }
+            // MODIFICACIÓN: Retraso de 250ms para permitir la sincronización del estado global de autenticación
+            setTimeout(() => {
+                if (from) {
+                    // Si el usuario intentó entrar a un link específico antes de loguearse
+                    navigate(from, { replace: true });
+                } else {
+                    // Redirección absoluta basada en el rol para evitar conflictos de sesión
+                    const redirectPath = role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
+                    navigate(redirectPath, { replace: true }); 
+                }
+            }, 250);
             
         } catch (error) {
             handleFirebaseError(error);
-        } finally {
-            setIsLoading(false);
+            setIsLoading(false); // Se asegura de detener el estado de carga en caso de error
         }
     };
 
@@ -112,7 +112,6 @@ const Login = () => {
                     </h2>
                     <p className="mt-2 text-sm text-gray-600">
                         O 
-                        {/* Pasamos el estado 'from' al registro también, por si deciden registrarse en vez de loguearse */}
                         <Link 
                             to="/register" 
                             state={{ from: location.state?.from }}
