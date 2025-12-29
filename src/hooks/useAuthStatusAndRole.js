@@ -6,18 +6,17 @@ const useAuthStatusAndRole = () => {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [role, setRole] = useState(null);
-  const [loadingRole, setLoadingRole] = useState(true); 
+  const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(async (currentUser) => {
-      // MODIFICACIÓN: Limpiamos el rol inmediatamente para evitar 
-      // que el rol del usuario anterior interfiera con el nuevo.
+      // Limpiamos todo al detectar cualquier cambio de auth
       setRole(null);
       setLoadingRole(true);
       
       setUser(currentUser);
       setAuthReady(true);
-      
+
       if (currentUser) {
         try {
           const userRef = doc(db, 'users', currentUser.uid);
@@ -29,7 +28,6 @@ const useAuthStatusAndRole = () => {
             setRole('guest');
           }
         } catch (error) {
-          console.error("Error al obtener el rol:", error);
           setRole('guest');
         } finally {
           setLoadingRole(false);

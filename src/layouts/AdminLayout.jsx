@@ -20,8 +20,10 @@ const AdminLayout = () => {
 
     const handleLogout = async () => {
         try {
+            // MODIFICACIÓN: Forzamos la salida mediante recarga de página a la raíz
+            // Esto evita que ProtectedRoute redirija a /login antes de tiempo
             await signOut(auth);
-            navigate('/login');
+            window.location.href = "/";
         } catch (error) {
             console.error("Error al cerrar sesión:", error);
         }

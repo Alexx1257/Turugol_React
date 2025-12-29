@@ -76,6 +76,7 @@ const Login = () => {
             const role = snap.data().role; 
             
             // 4. LÓGICA DE REDIRECCIÓN INTELIGENTE (Corregida con delay para sincronizar)
+            // Usamos un delay de 600ms para asegurar que los observadores de sesión global se limpien
             setTimeout(() => {
                 if (from) {
                     navigate(from, { replace: true });
@@ -83,7 +84,7 @@ const Login = () => {
                     const redirectPath = role === 'admin' ? '/dashboard/admin' : '/dashboard/user';
                     navigate(redirectPath, { replace: true }); 
                 }
-            }, 250);
+            }, 600);
             
         } catch (error) {
             handleFirebaseError(error);

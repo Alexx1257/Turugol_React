@@ -24,7 +24,6 @@ import ManageQuinielas from './pages/admin/ManageQuinielas';
 import UserManagement from './pages/admin/UserManagement';
 
 // [NUEVO] Importamos los submódulos de quiniela
-// Nota: Deberás crear estos archivos en el siguiente paso para que no de error
 import QuinielaDetail from './pages/admin/quinielas/QuinielaDetail';
 import ResultsManager from './pages/admin/quinielas/ResultsManager';
 import ParticipantsManager from './pages/admin/quinielas/ParticipantsManager';
@@ -39,10 +38,12 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} /> {/* [NUEVO] Ruta recuperación */}
+                <Route path="/forgot-password" element={<ForgotPassword />} />
 
-                {/* 2. RUTAS DE USUARIO */}
-                <Route element={<ProtectedRoute />}>
+                {/* 2. RUTAS DE USUARIO - MODIFICACIÓN: requiredRole="user" es CLAVE */}
+                {/* Al cerrar sesión, role pasa a null, ProtectedRoute detecta que 
+                    null !== "user" y muestra el Spinner en lugar de saltar al Login */}
+                <Route element={<ProtectedRoute requiredRole="user" />}>
                     <Route element={<UserLayout />}>
                         <Route path="/dashboard/user" element={<UserDashboardPage />} />
                         <Route path="/dashboard/user/available-quinielas" element={<AvailableQuinielas />} /> 
@@ -62,16 +63,15 @@ function App() {
                         {/* Creación */}
                         <Route path="/dashboard/admin/create" element={<CreateQuiniela />} />
 
-                        {/* [NUEVO] Módulo de Gestión de Quinielas */}
-                        {/* Lista principal */}
+                        {/* Módulo de Gestión de Quinielas */}
                         <Route path="/dashboard/admin/quinielas" element={<ManageQuinielas />} />
                         
-                        {/* Detalle y Submódulos (usan :id dinámico) */}
+                        {/* Detalle y Submódulos */}
                         <Route path="/dashboard/admin/quinielas/:id" element={<QuinielaDetail />} />
                         <Route path="/dashboard/admin/quinielas/:id/results" element={<ResultsManager />} />
                         <Route path="/dashboard/admin/quinielas/:id/participants" element={<ParticipantsManager />} />
 
-                        {/* Redirección de compatibilidad (por si usas /manage en el sidebar) */}
+                        {/* Redirección de compatibilidad */}
                         <Route path="/dashboard/admin/manage" element={<Navigate to="/dashboard/admin/quinielas" replace />} />
                     </Route>
                 </Route>
