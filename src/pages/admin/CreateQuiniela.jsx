@@ -9,6 +9,7 @@ import FixturePicker from './create-quiniela/FixturePicker';
 import QuinielaConfig from './create-quiniela/QuinielaConfig';
 import QuinielaSummary from './create-quiniela/QuinielaSummary';
 
+// [RESTAURADO] Importación de Sonner
 import { toast } from 'sonner';
 
 const QUINIELA_BORRADORES_COLLECTION = "quinielaBorradores";
@@ -42,7 +43,7 @@ const CreateQuiniela = () => {
     const [deadline, setDeadline] = useState(''); 
     const [maxFixtures, setMaxFixtures] = useState(10);
     
-    const [selectedLeagueId, setSelectedLeagueId] = useState(INITIAL_LEAGUES[0].id);
+    const [selectedLeagueId, setSelectedLeagueId] = useState(null); 
     const [selectedRound, setSelectedRound] = useState(''); 
     
     const [availableRounds, setAvailableRounds] = useState([]); 
@@ -56,12 +57,11 @@ const CreateQuiniela = () => {
     const [apiError, setApiError] = useState(null);
     const [isSaving, setIsSaving] = useState(false); 
     const [saveError, setSaveError] = useState(null); 
-    const [deadlineError, setDeadlineError] = useState('');
 
     const initialLoadRef = useRef(true); 
     const isSubmittingRef = useRef(false);
 
-    // --- NUEVA FUNCIÓN: PERSISTENCIA CENTRALIZADA ---
+    // --- [RESTAURADO] PERSISTENCIA CENTRALIZADA CON NOTIFICACIONES ---
     const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
 
     const persistDraft = async (overrides = {}, silent = false) => {
@@ -92,7 +92,7 @@ const CreateQuiniela = () => {
         }
     };
 
-    // --- LÓGICA DE LIGAS (RESTAURADA) ---
+    // --- LÓGICA DE LIGAS (MANTENIDA) ---
     const loadLeaguesFromApi = async () => {
         const CACHE_KEY = 'api_leagues_cache';
         const CACHE_TIME_KEY = 'api_leagues_cache_time';
@@ -130,47 +130,39 @@ const CreateQuiniela = () => {
     const removeLeague = (id) => {
         if (leagues.length <= 1) return toast.error('Mínimo una liga');
         setLeagues(prev => prev.filter(l => l.id !== id));
-        if (selectedLeagueId === id) setSelectedLeagueId(leagues.find(l => l.id !== id).id);
+        if (selectedLeagueId === id) setSelectedLeagueId(null);
         toast.info('Liga eliminada');
     };
 
     useEffect(() => { if (isManagingLeagues && apiLeaguesResults.length === 0) loadLeaguesFromApi(); }, [isManagingLeagues]);
 
-    // --- EFECTOS ---
-    useEffect(() => {
-        if (selectedFixtures.length > 0) {
-            const earliestMatchTimestamp = Math.min(...selectedFixtures.map(f => new Date(f.fixture.date).getTime()));
-            const oneHourBefore = new Date(earliestMatchTimestamp - 300000);
-            const tzOffset = oneHourBefore.getTimezoneOffset() * 60000;
-            const localISOTime = new Date(oneHourBefore.getTime() - tzOffset).toISOString().slice(0, 16);
-            setDeadline(localISOTime);
-            setDeadlineError(''); 
-        }
-    }, [selectedFixtures]);
-
-    // Carga inicial
+    // --- CARGA INICIAL Y LIMPIEZA ---
     useEffect(() => {
         if (!currentAdminId) return; 
         const loadInitialDraft = async () => {
             try {
                 const docSnap = await getDoc(getBorradorRef(currentAdminId));
                 if (docSnap.exists()) {
-                    const draft = docSnap.data();
-                    setTitle(draft.title || '');
-                    setDescription(draft.description || '');
-                    setSelectedFixtures(draft.selectedFixtures || []);
-                    if (draft.maxFixtures) setMaxFixtures(draft.maxFixtures);
-                    if (draft.leagues) setLeagues(draft.leagues);
-                    setSelectedLeagueId(draft.selectedLeagueId || INITIAL_LEAGUES[0].id);
-                    if (draft.selectedRound) setSelectedRound(draft.selectedRound);
+                    const d = docSnap.data();
+                    setTitle(d.title || '');
+                    setDescription(d.description || '');
+                    setSelectedFixtures(d.selectedFixtures || []);
+                    if (d.maxFixtures) setMaxFixtures(d.maxFixtures);
+                    if (d.leagues) setLeagues(d.leagues);
+                    setSelectedLeagueId(d.selectedLeagueId || null);
+                    if (d.selectedRound) setSelectedRound(d.selectedRound);
+                } else {
+                    setSelectedLeagueId(null);
+                    setSelectedRound('');
+                    setApiFixtures([]);
                 }
             } catch (error) { console.error(error); }
-            initialLoadRef.current = false;
+            finally { initialLoadRef.current = false; }
         };
         loadInitialDraft();
     }, [currentAdminId]); 
 
-    // Auto-guardado (Solo para cambios de texto)
+    // Auto-guardado silencioso para textos
     useEffect(() => {
         if (initialLoadRef.current || !currentAdminId || isSubmittingRef.current) return; 
         setIsSaving(true);
@@ -184,7 +176,7 @@ const CreateQuiniela = () => {
     // --- API FIXTURES ---
     useEffect(() => {
         const fetchRoundsForLeague = async () => {
-            if (!selectedLeagueId) return;
+            if (!selectedLeagueId || initialLoadRef.current) return;
             setIsLoadingRounds(true);
             try {
                 const allRoundsData = await fetchFromApi('fixtures/rounds', `?league=${selectedLeagueId}&season=${SEASON_YEAR}`);
@@ -194,11 +186,14 @@ const CreateQuiniela = () => {
             } catch (error) { toast.error("Error cargando jornadas"); }
             finally { setIsLoadingRounds(false); }
         };
-        if (!initialLoadRef.current) fetchRoundsForLeague();
+        fetchRoundsForLeague();
     }, [selectedLeagueId]);
 
     const fetchFixtures = useCallback(async (leagueId, roundName) => {
-        if (!leagueId || !roundName) return;
+        if (!leagueId || !roundName || initialLoadRef.current) {
+            setApiFixtures([]);
+            return;
+        }
         setIsLoading(true); setApiError(null);
         try {
             const data = await fetchFromApi('fixtures', `?league=${leagueId}&season=${SEASON_YEAR}&round=${encodeURIComponent(roundName)}&timezone=America/Mexico_City`);
@@ -226,7 +221,7 @@ const CreateQuiniela = () => {
         }
     };
 
-    // [MODIFICADO] toggleFixtureSelection ahora persiste inmediatamente
+    // [MODIFICADO] Persistencia inmediata con notificación al tocar partidos
     const toggleFixtureSelection = (fixtureData) => {
         setSelectedFixtures(prev => {
             const isSelected = prev.some(f => f.fixture.id === fixtureData.fixture.id);
@@ -245,7 +240,7 @@ const CreateQuiniela = () => {
                     return prev;
                 }
             }
-            persistDraft({ selectedFixtures: updatedList }); // Guardado inmediato
+            persistDraft({ selectedFixtures: updatedList }); 
             return updatedList;
         });
     };
@@ -264,7 +259,7 @@ const CreateQuiniela = () => {
         const createPromise = async () => {
             await setDoc(doc(collection(db, QUINIELAS_FINAL_COLLECTION)), quinielaPayload);
             await deleteDoc(getBorradorRef(currentAdminId));
-            setTitle(''); setDescription(''); setSelectedFixtures([]);
+            setTitle(''); setDescription(''); setSelectedFixtures([]); setSelectedLeagueId(null);
         };
         toast.promise(createPromise(), {
             loading: 'Publicando quiniela...', success: '¡Quiniela creada!', error: 'Error al guardar.',
@@ -308,7 +303,7 @@ const CreateQuiniela = () => {
                     <FixturePicker 
                         isLoading={isLoading} filteredFixtures={filteredFixtures} selectedFixtures={selectedFixtures}
                         toggleFixtureSelection={toggleFixtureSelection} selectedRound={selectedRound}
-                        handleRoundChange={(e) => setSelectedRound(e.target.value)} isLoadingRounds={isLoadingRounds}
+                        handleRoundChange={(e) => { setSelectedRound(e.target.value); setApiFixtures([]); }} isLoadingRounds={isLoadingRounds}
                         availableRounds={availableRounds} searchTerm={searchTerm} setSearchTerm={setSearchTerm}
                     />
                 </div>

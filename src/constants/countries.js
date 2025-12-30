@@ -1,4 +1,5 @@
 // src/constants/countries.js
+
 export const countryData = {
     // --- AMÉRICA ---
     "Mexico": { name: "México", region: "América" },
@@ -20,6 +21,8 @@ export const countryData = {
     "El-Salvador": { name: "El Salvador", region: "América" },
     "Canada": { name: "Canadá", region: "América" },
     "Jamaica": { name: "Jamaica", region: "América" },
+    "Trinidad-And-Tobago": { name: "Trinidad y Tobago", region: "América" },
+    "Cuba": { name: "Cuba", region: "América" },
 
     // --- EUROPA ---
     "England": { name: "Inglaterra", region: "Europa" },
@@ -58,6 +61,7 @@ export const countryData = {
     "Cyprus": { name: "Chipre", region: "Europa" },
     "Iceland": { name: "Islandia", region: "Europa" },
     "Georgia": { name: "Georgia", region: "Europa" },
+    "Luxembourg": { name: "Luxemburgo", region: "Europa" },
 
     // --- ASIA ---
     "Japan": { name: "Japón", region: "Asia" },
@@ -74,6 +78,7 @@ export const countryData = {
     "Vietnam": { name: "Vietnam", region: "Asia" },
     "Malaysia": { name: "Malasia", region: "Asia" },
     "Indonesia": { name: "Indonesia", region: "Asia" },
+    "Jordan": { name: "Jordania", region: "Asia" },
 
     // --- ÁFRICA ---
     "Egypt": { name: "Egipto", region: "África" },
@@ -89,6 +94,7 @@ export const countryData = {
     "Angola": { name: "Angola", region: "África" },
     "Mali": { name: "Mali", region: "África" },
     "DR-Congo": { name: "Rep. Dem. Congo", region: "África" },
+    "Zambia": { name: "Zambia", region: "África" },
 
     // --- OCEANÍA ---
     "Australia": { name: "Australia", region: "Oceanía" },
@@ -99,4 +105,45 @@ export const countryData = {
     "Europe": { name: "Europa (Continental)", region: "Mundo" },
     "Asia": { name: "Asia (Continental)", region: "Mundo" },
     "Africa": { name: "África (Continental)", region: "Mundo" }
+};
+
+/**
+ * Diccionario de términos comunes para traducir nombres de ligas
+ */
+export const commonTerms = {
+    "Cup": "Copa",
+    "League": "Liga",
+    "Women": "Femenil",
+    "Women's": "Femenil",
+    "Division": "División",
+    "Super": "Súper",
+    "National": "Nacional",
+    "Premier": "Premier",
+    "Championship": "Campeonato",
+    "Play-offs": "Eliminatorias",
+    "Friendlies": "Amistosos",
+    "Qualifying": "Clasificación",
+    "U20": "Sub-20",
+    "U23": "Sub-23",
+    "U17": "Sub-17",
+    "Apertura": "Apertura",
+    "Clausura": "Clausura",
+    "Youth": "Juvenil"
+};
+
+/**
+ * Función para traducir un nombre completo de liga
+ * Ejemplo: "Premier League Women" -> "Premier Liga Femenil"
+ */
+export const translateLeagueName = (name) => {
+    if (!name) return name;
+    let translatedName = name;
+    
+    Object.entries(commonTerms).forEach(([eng, esp]) => {
+        // Usamos regex para reemplazar palabras completas y evitar errores
+        const regex = new RegExp(`\\b${eng}\\b`, 'gi');
+        translatedName = translatedName.replace(regex, esp);
+    });
+    
+    return translatedName;
 };
