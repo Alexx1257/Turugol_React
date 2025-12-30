@@ -8,6 +8,9 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from "../firebase/config";
 
+// [NUEVO] Importación exclusiva de Sonner
+import { toast } from 'sonner';
+
 const Register = () => {
     const navigate = useNavigate();
 
@@ -99,10 +102,19 @@ const Register = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setServerError('');
-        if (passwordStrength.score < 3) return setServerError('Contraseña demasiado débil.');
-        if (!passwordMatch.isMatch) return setServerError('Las contraseñas no coinciden.');
+        
+        if (passwordStrength.score < 3) {
+            toast.error('Contraseña débil', { description: 'Asegúrate de cumplir con los requisitos de seguridad.' });
+            return setServerError('Contraseña demasiado débil.');
+        }
+        if (!passwordMatch.isMatch) {
+            toast.error('Error de coincidencia', { description: 'Las contraseñas ingresadas no son iguales.' });
+            return setServerError('Las contraseñas no coinciden.');
+        }
         
         setIsLoading(true);
+        const toastId = toast.loading('Creando tu cuenta...');
+
         try {
             const res = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
             await updateProfile(res.user, { displayName: `${formData.firstName} ${formData.lastName}` });
@@ -115,18 +127,36 @@ const Register = () => {
                 createdAt: new Date().toISOString()
             });
             await sendEmailVerification(res.user, { url: window.location.origin + '/login' });
+            
             setVerificationSent(true);
             setSuccessMessage('Cuenta creada. Verifica tu email.');
-            setTimeout(() => navigate('/login'), 5000);
+            
+            // [MODIFICADO] Uso exclusivo de Sonner para el éxito con aviso de SPAM
+            toast.success('¡Registro exitoso!', {
+                id: toastId,
+                description: 'Revisa tu bandeja de entrada o carpeta de SPAM para activar tu cuenta. Redirigiendo...',
+                duration: 6000
+            });
+
+            setTimeout(() => {
+                navigate('/login');
+            }, 5000);
+
         } catch (error) {
-            setServerError('Error al registrar. Intenta de nuevo.');
+            const map = {
+                'auth/email-already-in-use': 'Este correo ya está registrado en TURUGOL.',
+                'auth/invalid-email': 'El formato del correo no es válido.',
+                'auth/weak-password': 'La contraseña es muy insegura.'
+            };
+            const message = map[error.code] || 'Ocurrió un error al registrar. Intenta de nuevo.';
+            setServerError(message);
+            toast.error('No se pudo completar el registro', { id: toastId, description: message });
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        // 🛑 CONTENEDOR DE CENTRADO (Mantiene el bg original si lo deseas)
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12 w-full">
             <div className="max-w-md w-full space-y-8">
                 <div className="text-center">
@@ -144,8 +174,8 @@ const Register = () => {
                 
                 <div className="bg-white py-8 px-4 shadow-lg rounded-2xl sm:px-10 border border-gray-100">
                     <form className="space-y-6" onSubmit={handleSubmit}>
-                        {verificationSent && <div className="p-3 text-sm bg-blue-100 text-blue-700 rounded-lg">{successMessage}</div>}
-                        {serverError && <div className="p-3 text-sm bg-red-100 text-red-700 rounded-lg">{serverError}</div>}
+                        
+                        {/* Se eliminaron las alertas estáticas del JSX para usar notificaciones dinámicas */}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -215,7 +245,7 @@ const Register = () => {
                             {passwordMatch.message && <div className={`mt-1 text-xs ${passwordMatch.color}`}>{passwordMatch.message}</div>}
                         </div>
 
-                        <button type="submit" disabled={isLoading} className="w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50">
+                        <button type="submit" disabled={isLoading} className="w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 transition-all">
                             {isLoading ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-user-plus mr-2"></i>}
                             {isLoading ? 'Creando...' : 'Crear cuenta'}
                         </button>

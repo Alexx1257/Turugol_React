@@ -3,6 +3,9 @@ import { db, auth } from '../../firebase/config';
 import { doc, setDoc, getDoc, deleteDoc, collection } from 'firebase/firestore'; 
 import { fetchFromApi } from '../../services/footballApi';
 
+// [NUEVO] Importación exclusiva de Sonner
+import { toast } from 'sonner';
+
 const QUINIELA_BORRADORES_COLLECTION = "quinielaBorradores";
 const QUINIELAS_FINAL_COLLECTION = "quinielas";
 
@@ -10,30 +13,30 @@ const SEASON_YEAR = 2025;
 const MAX_FIXTURES = 9;
 const MAX_DESCRIPTION_CHARS = 200;
 
-const DUMMY_LEAGUES = [
+const INITIAL_LEAGUES = [
     { id: 2, name: 'UEFA Champions League', nameShort: 'CHAMPIONS', logo: 'https://media.api-sports.io/football/leagues/2.png' },
     { id: 13, name: 'Copa Libertadores', nameShort: 'LIBERTADORES', logo: 'https://media.api-sports.io/football/leagues/13.png' },
     { id: 39, name: 'Premier League', nameShort: 'PREMIER', logo: 'https://media.api-sports.io/football/leagues/39.png' },
     { id: 140, name: 'LaLiga', nameShort: 'LALIGA', logo: 'https://media.api-sports.io/football/leagues/140.png' },
     { id: 135, name: 'Serie A', nameShort: 'SERIE A', logo: 'https://media.api-sports.io/football/leagues/135.png' },
-    { id: 78, name: 'Bundesliga', nameShort: 'BUNDESLIGA', logo: 'https://media.api-sports.io/football/leagues/78.png' },
-    { id: 61, name: 'Ligue 1', nameShort: 'LIGUE 1', logo: 'https://media.api-sports.io/football/leagues/61.png' },
     { id: 262, name: 'Liga MX', nameShort: 'LIGA MX', logo: 'https://media.api-sports.io/football/leagues/262.png' },
-    { id: 253, name: 'Major League Soccer', nameShort: 'MLS', logo: 'https://media.api-sports.io/football/leagues/253.png' },
-    { id: 128, name: 'Liga Profesional Argentina', nameShort: 'ARGENTINA', logo: 'https://media.api-sports.io/football/leagues/128.png' },
-    { id: 71, name: 'Brasileirão Série A', nameShort: 'BRASIL', logo: 'https://media.api-sports.io/football/leagues/71.png' },
 ];
-
 
 const CreateQuiniela = () => {
     const user = auth.currentUser; 
     const currentAdminId = user ? user.uid : null; 
 
     // --- ESTADOS ---
+    const [leagues, setLeagues] = useState(INITIAL_LEAGUES);
+    const [isManagingLeagues, setIsManagingLeagues] = useState(false);
+    const [apiLeaguesResults, setApiLeaguesResults] = useState([]);
+    const [isSearchingLeagues, setIsSearchingLeagues] = useState(false);
+    const [searchApiLeague, setSearchApiLeague] = useState('');
+
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [deadline, setDeadline] = useState(''); 
-    const [selectedLeagueId, setSelectedLeagueId] = useState(DUMMY_LEAGUES[0].id);
+    const [selectedLeagueId, setSelectedLeagueId] = useState(INITIAL_LEAGUES[0].id);
     const [selectedRound, setSelectedRound] = useState(''); 
     
     const [availableRounds, setAvailableRounds] = useState([]); 
@@ -51,6 +54,50 @@ const CreateQuiniela = () => {
 
     const initialLoadRef = useRef(true); 
     const isSubmittingRef = useRef(false);
+
+    // --- LÓGICA DE LIGAS DESDE API ---
+    const loadLeaguesFromApi = async () => {
+        setIsSearchingLeagues(true);
+        try {
+            const data = await fetchFromApi('leagues', `?current=true&season=${SEASON_YEAR}`);
+            setApiLeaguesResults(data.response || []);
+        } catch (error) {
+            toast.error('Error al cargar ligas');
+        } finally {
+            setIsSearchingLeagues(false);
+        }
+    };
+
+    const addLeague = (item) => {
+        if (leagues.some(l => l.id === item.league.id)) return toast.warning('Ya está en la lista');
+        const newLeague = {
+            id: item.league.id,
+            name: item.league.name,
+            nameShort: item.league.name.substring(0, 12).toUpperCase(),
+            logo: item.league.logo
+        };
+        setLeagues(prev => [...prev, newLeague]);
+        toast.success('Liga añadida');
+    };
+
+    const removeLeague = (id) => {
+        if (leagues.length <= 1) return toast.error('Mínimo una liga');
+        setLeagues(prev => prev.filter(l => l.id !== id));
+        if (selectedLeagueId === id) setSelectedLeagueId(leagues.find(l => l.id !== id).id);
+        toast.info('Liga eliminada');
+    };
+
+    useEffect(() => {
+        if (isManagingLeagues && apiLeaguesResults.length === 0) loadLeaguesFromApi();
+    }, [isManagingLeagues]);
+
+    // [NUEVO] Función para agrupar ligas por país
+    const groupedLeagues = apiLeaguesResults.reduce((acc, item) => {
+        const country = item.country.name;
+        if (!acc[country]) acc[country] = [];
+        acc[country].push(item);
+        return acc;
+    }, {});
 
     // --- FUNCIONES FIREBASE ---
     const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
@@ -76,9 +123,8 @@ const CreateQuiniela = () => {
         return quinielaRef.id;
     };
 
-    // --- EFECTOS (Lógica de negocio) ---
+    // --- EFECTOS ---
     
-    // 1. Calcular Fecha Límite Automática
     useEffect(() => {
         if (selectedFixtures.length > 0) {
             const earliestMatchTimestamp = Math.min(
@@ -92,7 +138,6 @@ const CreateQuiniela = () => {
         }
     }, [selectedFixtures]);
 
-    // 2. Cargar Borrador Inicial
     useEffect(() => {
         if (!currentAdminId) return; 
         const loadInitialDraft = async () => {
@@ -103,18 +148,19 @@ const CreateQuiniela = () => {
                     setDescription(draft.description || '');
                     if (!draft.selectedFixtures?.length) setDeadline(draft.deadline || '');
                     setSelectedFixtures(draft.selectedFixtures || []);
-                    setSelectedLeagueId(draft.selectedLeagueId || DUMMY_LEAGUES[0].id);
+                    if (draft.leagues) setLeagues(draft.leagues);
+                    setSelectedLeagueId(draft.selectedLeagueId || INITIAL_LEAGUES[0].id);
                     if (draft.selectedRound) setSelectedRound(draft.selectedRound);
                 }
             } catch (error) {
                 console.error(error);
+                toast.error("Error al cargar borrador");
             }
             initialLoadRef.current = false;
         };
         loadInitialDraft();
     }, [currentAdminId]); 
 
-    // 3. Auto-guardado
     useEffect(() => {
         if (initialLoadRef.current || !currentAdminId || isSubmittingRef.current) return; 
         setIsSaving(true);
@@ -123,7 +169,7 @@ const CreateQuiniela = () => {
             if (title || selectedFixtures.length > 0) {
                 try {
                     await saveDraftToFirebase({
-                        title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound
+                        title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, leagues
                     }, currentAdminId); 
                 } catch (error) {
                     setSaveError("Error al autoguardar");
@@ -132,9 +178,8 @@ const CreateQuiniela = () => {
             setIsSaving(false);
         }, 1500); 
         return () => clearTimeout(timer); 
-    }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, currentAdminId]);
+    }, [title, description, deadline, selectedFixtures, selectedLeagueId, selectedRound, currentAdminId, leagues]);
 
-    // 4. Cargar Jornadas (Rounds)
     useEffect(() => {
         const fetchRoundsForLeague = async () => {
             if (!selectedLeagueId) return;
@@ -154,8 +199,7 @@ const CreateQuiniela = () => {
                     setSelectedRound(allRoundsData.response[allRoundsData.response.length - 1]);
                 }
             } catch (error) {
-                console.error("Error al cargar rondas:", error);
-                setApiError("Error al cargar las jornadas.");
+                toast.error("Error al cargar jornadas");
             } finally {
                 setIsLoadingRounds(false);
             }
@@ -166,7 +210,6 @@ const CreateQuiniela = () => {
         }
     }, [selectedLeagueId]);
 
-    // 5. Cargar Partidos (Fixtures)
     const fetchFixtures = useCallback(async (leagueId, roundName) => {
         if (!leagueId || !roundName) return;
         setIsLoading(true);
@@ -217,7 +260,7 @@ const CreateQuiniela = () => {
             if (isSelected) {
                 return prev.filter(f => f.fixture.id !== fixtureData.fixture.id);
             } else if (prev.length < MAX_FIXTURES) {
-                const league = DUMMY_LEAGUES.find(l => l.id === selectedLeagueId);
+                const league = leagues.find(l => l.id === selectedLeagueId);
                 return [...prev, { 
                     ...fixtureData, 
                     league: { 
@@ -227,6 +270,8 @@ const CreateQuiniela = () => {
                         round: fixtureData.league.round 
                     }
                 }];
+            } else {
+                toast.warning('Límite alcanzado', { description: `Solo puedes seleccionar hasta ${MAX_FIXTURES} partidos.` });
             }
             return prev; 
         });
@@ -237,6 +282,7 @@ const CreateQuiniela = () => {
         if (!currentAdminId || deadlineError) return;
 
         isSubmittingRef.current = true;
+        
         const quinielaPayload = {
             metadata: { 
                 title, 
@@ -260,24 +306,30 @@ const CreateQuiniela = () => {
             })),
         };
 
-        try {
+        const createPromise = async () => {
             await saveFinalQuiniela(quinielaPayload);
             await deleteDraftFromFirebase(currentAdminId);
-            alert(`¡Quiniela creada con éxito!`);
-            initialLoadRef.current = true;
             setTitle(''); setDescription(''); setDeadline(''); setSelectedRound(''); setSelectedFixtures([]);
-        } catch (error) {
-            console.error(error);
-            alert("Error al guardar la quiniela.");
-        } finally {
-            setTimeout(() => { isSubmittingRef.current = false; initialLoadRef.current = false; }, 1000);
-        }
+            initialLoadRef.current = true;
+        };
+
+        toast.promise(createPromise(), {
+            loading: 'Publicando quiniela...',
+            success: '¡Quiniela creada con éxito!',
+            error: 'No se pudo guardar la quiniela.',
+            finally: () => {
+                isSubmittingRef.current = false;
+                initialLoadRef.current = false;
+            }
+        });
     };
 
-    const filteredFixtures = apiFixtures.filter(f => 
-        f.teams.home.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        f.teams.away.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredFixtures = apiFixtures.filter(f => {
+        const matchesSearch = f.teams.home.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             f.teams.away.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const isFuture = f.fixture.status.short === "NS" && new Date(f.fixture.date) > new Date();
+        return matchesSearch && isFuture;
+    });
 
     const isReadyToSubmit = title && deadline && selectedFixtures.length === MAX_FIXTURES && !deadlineError && !isLoading;
 
@@ -289,11 +341,6 @@ const CreateQuiniela = () => {
                     <h2 className="text-3xl font-bold text-gray-800">Crear Nueva Quiniela</h2>
                     <p className="text-gray-500 mt-1">Configura el evento y selecciona los {MAX_FIXTURES} partidos.</p>
                 </div>
-                {isSaving && !isSubmittingRef.current && (
-                    <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-                        <i className="fas fa-cloud-upload-alt mr-2"></i> Guardando borrador...
-                    </div>
-                )}
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col xl:flex-row gap-8">
@@ -301,32 +348,86 @@ const CreateQuiniela = () => {
                 <div className="xl:w-2/3 space-y-8"> 
                     
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                            <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm">1</span>
-                            Selecciona la Liga
-                        </h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                                <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm">1</span>
+                                Selecciona la Liga
+                            </h3>
+                            <button 
+                                type="button" 
+                                onClick={() => setIsManagingLeagues(!isManagingLeagues)}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors"
+                            >
+                                {isManagingLeagues ? 'Cerrar Gestión' : 'Gestionar Ligas'}
+                            </button>
+                        </div>
+
+                        {/* PANEL DE GESTIÓN AGRUPADO POR PAÍS */}
+                        {isManagingLeagues && (
+                            <div className="mb-6 p-4 bg-gray-50 rounded-xl border-2 border-dashed">
+                                <div className="flex gap-2 mb-6">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filtrar por país o nombre..." 
+                                        className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                                        onChange={(e) => setSearchApiLeague(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {isSearchingLeagues ? <p className="text-xs text-center">Cargando ligas...</p> :
+                                        Object.keys(groupedLeagues).filter(country => 
+                                            country.toLowerCase().includes(searchApiLeague.toLowerCase()) || 
+                                            groupedLeagues[country].some(l => l.league.name.toLowerCase().includes(searchApiLeague.toLowerCase()))
+                                        ).map(country => (
+                                            <div key={country}>
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">{country}</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                    {groupedLeagues[country].filter(item => 
+                                                        item.league.name.toLowerCase().includes(searchApiLeague.toLowerCase()) || country.toLowerCase().includes(searchApiLeague.toLowerCase())
+                                                    ).map(item => (
+                                                        <div key={item.league.id} className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm">
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                <img src={item.league.logo} className="h-6 w-6 object-contain" alt="" />
+                                                                <span className="text-[10px] font-bold truncate">{item.league.name}</span>
+                                                            </div>
+                                                            <button type="button" onClick={() => addLeague(item)} className="text-blue-500 hover:text-blue-700 transition-transform active:scale-90"><i className="fas fa-plus-circle"></i></button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            {DUMMY_LEAGUES.map(league => (
-                                <button
-                                    type="button"
-                                    key={league.id}
-                                    onClick={() => handleLeagueClick(league.id)}
-                                    className={`relative group flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
-                                        selectedLeagueId === league.id 
-                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 ring-offset-2' 
-                                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <img src={league.logo} alt={league.nameShort} className="h-12 object-contain mb-3 group-hover:scale-110 transition-transform" />
-                                    <span className={`font-bold text-sm ${selectedLeagueId === league.id ? 'text-blue-700' : 'text-gray-600'}`}>
-                                        {league.nameShort}
-                                    </span>
-                                    {selectedLeagueId === league.id && (
-                                        <div className="absolute top-2 right-2 text-blue-500">
-                                            <i className="fas fa-check-circle"></i>
-                                        </div>
+                            {leagues.map(league => (
+                                <div key={league.id} className="relative group">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleLeagueClick(league.id)}
+                                        className={`w-full flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
+                                            selectedLeagueId === league.id 
+                                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' 
+                                            : 'border-gray-100 bg-white hover:border-blue-200'
+                                        }`}
+                                    >
+                                        <img src={league.logo} alt="" className="h-10 object-contain mb-2" />
+                                        <span className={`font-black text-[10px] tracking-tighter text-center uppercase ${selectedLeagueId === league.id ? 'text-blue-700' : 'text-gray-400'}`}>
+                                            {league.nameShort}
+                                        </span>
+                                    </button>
+                                    {isManagingLeagues && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => removeLeague(league.id)}
+                                            className="absolute -top-1 -right-1 bg-white text-red-500 w-5 h-5 rounded-full flex items-center justify-center shadow-lg border border-red-100"
+                                        >
+                                            <i className="fas fa-times text-[10px]"></i>
+                                        </button>
                                     )}
-                                </button>
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -339,7 +440,7 @@ const CreateQuiniela = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Título del Evento</label> 
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-1 tracking-widest">Título del Evento</label> 
                                     <input 
                                         name="title" 
                                         type="text" 
@@ -351,34 +452,29 @@ const CreateQuiniela = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                        Cierre de Apuestas <span className="text-blue-500 text-xs font-normal ml-1">(Automático -1h)</span>
-                                    </label> 
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-1 tracking-widest">Cierre de Apuestas</label> 
                                     <input 
                                         name="deadline" 
                                         type="datetime-local" 
                                         required 
                                         value={deadline} 
                                         onChange={handleInputChange} 
-                                        className={`w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white transition-colors ${deadlineError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`} 
+                                        className={`w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white transition-colors ${deadlineError ? 'border-red-500' : 'border-gray-300'}`} 
                                     />
-                                    {deadlineError && <p className="text-red-500 text-xs mt-1 font-bold">{deadlineError}</p>}
                                 </div>
                             </div>
                             <div>
                                 <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-sm font-semibold text-gray-700">Descripción / Premios</label>
-                                    <span className={`text-xs ${description.length >= MAX_DESCRIPTION_CHARS ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
-                                        {description.length}/{MAX_DESCRIPTION_CHARS}
-                                    </span>
+                                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Premios / Reglas</label>
+                                    <span className="text-[10px] text-gray-400 font-bold">{description.length}/{MAX_DESCRIPTION_CHARS}</span>
                                 </div>
                                 <textarea 
                                     name="description" 
                                     rows="4" 
                                     value={description} 
                                     onChange={handleInputChange} 
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none" 
-                                    placeholder="Describe los premios o reglas especiales..." 
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm" 
+                                    placeholder="Describe los premios..." 
                                 />
                             </div>
                         </div>
@@ -392,94 +488,59 @@ const CreateQuiniela = () => {
                             </h3>
                             
                             <div className="flex gap-3 w-full md:w-auto">
-                                <div className="relative w-full md:w-48">
-                                    <select 
-                                        value={selectedRound} 
-                                        onChange={handleRoundChange} 
-                                        disabled={isLoadingRounds || availableRounds.length === 0} 
-                                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none bg-white text-sm"
-                                    >
-                                        <option value="">{isLoadingRounds ? "Cargando..." : "-- Jornada --"}</option>
-                                        {availableRounds.map(round => (
-                                            <option key={round} value={round}>{round}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-500">
-                                        <i className="fas fa-chevron-down text-xs"></i>
-                                    </div>
-                                </div>
-                                
-                                <div className="relative w-full md:w-48">
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar equipo..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                    />
-                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                </div>
+                                <select 
+                                    value={selectedRound} 
+                                    onChange={handleRoundChange} 
+                                    disabled={isLoadingRounds || availableRounds.length === 0} 
+                                    className="pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-xs font-bold uppercase"
+                                >
+                                    <option value="">-- Jornada --</option>
+                                    {availableRounds.map(round => <option key={round} value={round}>{round}</option>)}
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar equipo..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-3 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs"
+                                />
                             </div>
                         </div>
 
                         <div className="min-h-[300px]">
                             {isLoading ? (
-                                <div className="flex flex-col items-center justify-center h-48 text-blue-500">
-                                    <i className="fas fa-circle-notch fa-spin text-3xl mb-3"></i>
-                                    <p>Cargando partidos...</p>
-                                </div>
-                            ) : apiError ? (
-                                <div className="p-4 bg-red-50 text-red-600 rounded-lg text-center border border-red-100">
-                                    <i className="fas fa-exclamation-triangle mr-2"></i> {apiError}
-                                </div>
+                                <div className="flex flex-col items-center justify-center h-48 text-blue-500"><i className="fas fa-spinner fa-spin text-2xl mb-2"></i><p className="text-xs font-bold">Obteniendo partidos...</p></div>
                             ) : filteredFixtures.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-48 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                                    <i className="fas fa-futbol text-3xl mb-2 opacity-50"></i>
-                                    <p>No hay partidos disponibles.</p>
-                                </div>
+                                <div className="flex flex-col items-center justify-center h-48 text-gray-400 border-2 border-dashed border-gray-100 rounded-xl"><p className="text-xs">No hay partidos futuros disponibles.</p></div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                     {filteredFixtures.map((fixtureData) => {
                                         const fixture = fixtureData.fixture;
                                         const teams = fixtureData.teams;
                                         const date = new Date(fixture.date);
                                         const isSelected = selectedFixtures.some(f => f.fixture.id === fixture.id);
-                                        
                                         return (
                                             <div 
                                                 key={fixture.id} 
                                                 onClick={() => toggleFixtureSelection(fixtureData)}
-                                                className={`
-                                                    relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
-                                                    ${isSelected 
-                                                        ? 'border-green-500 bg-green-50 shadow-sm' 
-                                                        : 'border-gray-100 bg-white hover:border-blue-300 hover:shadow-md'}
-                                                `}
+                                                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${isSelected ? 'border-green-500 bg-green-50 shadow-sm' : 'border-gray-100 bg-white hover:border-blue-300 hover:shadow-md'}`}
                                             >
-                                                <div className="flex justify-between text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                                                <div className="flex justify-between text-[10px] font-black text-gray-400 mb-3 uppercase tracking-tighter">
                                                     <span>{date.toLocaleDateString()}</span>
                                                     <span>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                 </div>
-                                                
                                                 <div className="flex items-center justify-between">
-                                                    <div className="flex flex-col items-center w-5/12">
-                                                        <img src={teams.home.logo} alt={teams.home.name} className="w-10 h-10 object-contain mb-2 group-hover:scale-110 transition-transform" />
-                                                        <span className="text-xs font-bold text-center leading-tight">{teams.home.nameShort || teams.home.name}</span>
+                                                    <div className="flex flex-col items-center w-5/12 overflow-hidden">
+                                                        <img src={teams.home.logo} alt="" className="w-8 h-8 object-contain mb-2" />
+                                                        <span className="text-[10px] font-black text-center truncate w-full">{teams.home.name}</span>
                                                     </div>
-                                                    
-                                                    <span className="text-gray-300 font-black text-sm">VS</span>
-                                                    
-                                                    <div className="flex flex-col items-center w-5/12">
-                                                        <img src={teams.away.logo} alt={teams.away.name} className="w-10 h-10 object-contain mb-2 group-hover:scale-110 transition-transform" />
-                                                        <span className="text-xs font-bold text-center leading-tight">{teams.away.nameShort || teams.away.name}</span>
+                                                    <span className="text-gray-300 font-black text-[10px]">VS</span>
+                                                    <div className="flex flex-col items-center w-5/12 overflow-hidden">
+                                                        <img src={teams.away.logo} alt="" className="w-8 h-8 object-contain mb-2" />
+                                                        <span className="text-[10px] font-black text-center truncate w-full">{teams.away.name}</span>
                                                     </div>
                                                 </div>
-
-                                                {isSelected && (
-                                                    <div className="absolute top-2 right-2 bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm animate-bounce-in">
-                                                        <i className="fas fa-check text-xs"></i>
-                                                    </div>
-                                                )}
+                                                {isSelected && <div className="absolute top-2 right-2 bg-green-500 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm"><i className="fas fa-check text-[10px]"></i></div>}
                                             </div>
                                         );
                                     })}
@@ -491,71 +552,34 @@ const CreateQuiniela = () => {
 
                 <div className="xl:w-1/3">
                     <div className="sticky top-6 bg-slate-900 text-white p-6 rounded-2xl shadow-2xl ring-1 ring-white/10">
-                        
                         <div className="flex justify-between items-center border-b border-slate-700 pb-4 mb-4">
-                            <h3 className="text-lg font-bold text-blue-400">Resumen</h3>
-                            <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-bold border ${selectedFixtures.length === MAX_FIXTURES ? 'bg-green-500 border-green-500 text-white' : 'bg-slate-800 border-slate-600 text-gray-300'}`}>
-                                <span>{selectedFixtures.length} / {MAX_FIXTURES}</span>
+                            <h3 className="text-sm font-black text-blue-400 uppercase tracking-widest">Resumen</h3>
+                            <div className={`px-3 py-1 rounded-full text-[10px] font-black border ${selectedFixtures.length === MAX_FIXTURES ? 'bg-green-500 border-green-500' : 'bg-slate-800 border-slate-600 text-gray-300'}`}>
+                                {selectedFixtures.length} / {MAX_FIXTURES}
                             </div>
                         </div>
-                        
-                        <div className="space-y-3 max-h-[calc(100vh-350px)] overflow-y-auto pr-2 custom-scrollbar-dark mb-6">
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar-dark mb-6">
                             {selectedFixtures.length === 0 ? (
-                                <div className="text-center py-10 text-slate-600">
-                                    <i className="fas fa-clipboard-list text-4xl mb-3 opacity-50"></i>
-                                    <p className="text-sm">Selecciona partidos para armar tu quiniela.</p>
-                                </div>
+                                <div className="text-center py-10 text-slate-600"><p className="text-xs italic">Selecciona {MAX_FIXTURES} partidos...</p></div>
                             ) : (
-                                selectedFixtures.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)).map((f) => (
-                                    <div key={f.fixture.id} className="group relative bg-slate-800/50 hover:bg-slate-800 p-3 rounded-lg border border-slate-700 transition-colors">
-                                        
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); toggleFixtureSelection(f); }}
-                                            className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110 z-10"
-                                        >
-                                            <i className="fas fa-times text-xs"></i>
-                                        </button>
-
-                                        <div className="flex items-center justify-between text-sm">
-                                            <div className="flex items-center gap-2 w-5/12 overflow-hidden">
-                                                <img src={f.teams.home.logo} className="w-5 h-5 object-contain" alt="" />
-                                                <span className="truncate font-medium text-slate-200">{f.teams.home.nameShort || f.teams.home.name.substring(0, 10)}</span>
-                                            </div>
-                                            <span className="text-slate-600 text-xs font-bold">VS</span>
-                                            <div className="flex items-center justify-end gap-2 w-5/12 overflow-hidden">
-                                                <span className="truncate font-medium text-slate-200 text-right">{f.teams.away.nameShort || f.teams.away.name.substring(0, 10)}</span>
-                                                <img src={f.teams.away.logo} className="w-5 h-5 object-contain" alt="" />
-                                            </div>
+                                [...selectedFixtures].sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date)).map((f) => (
+                                    <div key={f.fixture.id} className="group flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700">
+                                        <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                            <img src={f.teams.home.logo} className="w-4 h-4 object-contain" alt="" />
+                                            <span className="text-[10px] truncate font-bold text-slate-300">{f.teams.home.name} vs {f.teams.away.name}</span>
                                         </div>
-                                        <div className="mt-2 text-[10px] text-center text-slate-500 font-mono">
-                                            {new Date(f.fixture.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); toggleFixtureSelection(f); }} className="text-red-400 hover:text-red-300 ml-2"><i className="fas fa-times-circle text-xs"></i></button>
                                     </div>
                                 ))
                             )}
                         </div>
-
                         <button 
                             type="submit" 
                             disabled={!isReadyToSubmit || isSubmittingRef.current} 
-                            className="w-full py-4 px-6 rounded-xl font-bold text-sm tracking-wide text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 focus:ring-4 focus:ring-blue-500/30 shadow-lg disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed transition-all transform active:scale-95"
+                            className="w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] text-white bg-blue-600 hover:bg-blue-500 shadow-lg disabled:opacity-50 transition-all active:scale-95"
                         >
-                            {isSubmittingRef.current ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <i className="fas fa-spinner fa-spin"></i> CREANDO...
-                                </span>
-                            ) : (
-                                <span className="flex items-center justify-center gap-2">
-                                    CONFIRMAR QUINIELA <i className="fas fa-arrow-right"></i>
-                                </span>
-                            )}
+                            {isSubmittingRef.current ? 'Publicando...' : 'Confirmar Quiniela'}
                         </button>
-                        
-                        {!isReadyToSubmit && selectedFixtures.length > 0 && (
-                            <p className="text-center text-xs text-slate-500 mt-3">
-                                Completa todos los campos y selecciona {MAX_FIXTURES} partidos.
-                            </p>
-                        )}
                     </div>
                 </div>
             </form>

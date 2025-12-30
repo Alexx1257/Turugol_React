@@ -5,6 +5,9 @@ import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword'; // [NUEVO] Importación recuperación
 
+// [NUEVO] Importación de Sonner para notificaciones globales
+import { Toaster } from 'sonner';
+
 // Layouts
 import AdminLayout from './layouts/AdminLayout';
 import UserLayout from './layouts/UserLayout';
@@ -33,6 +36,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 function App() {
     return (
         <div className="App">
+            {/* [NUEVO] Componente Toaster: Controla la aparición de notificaciones tipo Toast */}
+            {/* position: ubicación, richColors: colores para éxito/error, closeButton: permite cerrar manual */}
+            <Toaster position="top-right" richColors closeButton />
+
             <Routes>
                 {/* 1. RUTAS PÚBLICAS */}
                 <Route path="/" element={<Home />} />

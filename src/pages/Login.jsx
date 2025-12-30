@@ -4,6 +4,9 @@ import { signInWithEmailAndPassword, sendEmailVerification } from "firebase/auth
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config"; 
 
+// [NUEVO] Importación exclusiva de Sonner
+import { toast } from 'sonner';
+
 const Login = () => {
     const navigate = useNavigate();
     const location = useLocation(); // 2. Inicializamos el hook de ubicación
@@ -22,19 +25,27 @@ const Login = () => {
     const [verificationSent, setVerificationSent] = useState(false);
 
     // 3. Detectamos si hay una página pendiente (ej: una quiniela compartida)
-    // "location.state.from" viene de ProtectedRoute.jsx
     const from = location.state?.from?.pathname || null;
 
     const handleFirebaseError = (error) => {
         const map = {
-            "auth/user-not-found": "No existe una cuenta con este email",
-            "auth/wrong-password": "Contraseña incorrecta",
-            "auth/invalid-email": "Correo inválido",
-            "auth/too-many-requests": "Demasiados intentos fallidos. Intenta más tarde",
-            "auth/network-request-failed": "Error de conexión",
-            "auth/user-disabled": "Esta cuenta ha sido deshabilitada",
+            "auth/user-not-found": "El correo electrónico no está registrado. Verifica si lo escribiste bien o crea una cuenta nueva.",
+            "auth/wrong-password": "La contraseña es incorrecta. Asegúrate de que las mayúsculas y minúsculas sean correctas.",
+            "auth/invalid-email": "El formato del correo electrónico no es válido (ejemplo: usuario@correo.com).",
+            "auth/too-many-requests": "Demasiados intentos fallidos. Por seguridad, la cuenta se ha bloqueado temporalmente. Intenta de nuevo en unos minutos.",
+            "auth/network-request-failed": "No hay conexión a internet. Revisa tu señal e intenta de nuevo.",
+            "auth/user-disabled": "Esta cuenta ha sido suspendida. Contacta con el administrador.",
+            "auth/invalid-credential": "Los datos de acceso son incorrectos. Por favor, verifica tu correo y contraseña."
         };
-        setServerError(map[error.code] || "Error desconocido al iniciar sesión. (" + error.code + ")");
+        
+        const message = map[error.code] || "Ocurrió un error inesperado. Por favor, intenta de nuevo.";
+        setServerError(message);
+        
+        // [NUEVO] Manejo de error de servidor con Toast descriptivo
+        toast.error('Error de acceso', {
+            description: message,
+            duration: 5000
+        });
     };
 
     const isValidEmail = (email) => {
@@ -47,11 +58,16 @@ const Login = () => {
         setServerError(""); 
         setVerificationSent(false);
 
-        if (!email || !password) return alert('Por favor, completa todos los campos');
-        if (!isValidEmail(email)) return alert('Por favor, introduce un correo electrónico válido');
-        if (password.length < 6) return alert('La contraseña debe tener al menos 6 caracteres');
+        // [MODIFICADO] Validaciones con Toast descriptivo
+        if (!email) return toast.warning('Falta el correo', { description: 'Introduce tu dirección de email para continuar.' });
+        if (!password) return toast.warning('Falta la contraseña', { description: 'Debes ingresar tu clave de acceso.' });
+        if (!isValidEmail(email)) return toast.warning('Correo no válido', { description: 'El formato de email ingresado es incorrecto.' });
+        if (password.length < 6) return toast.warning('Contraseña muy corta', { description: 'Tu contraseña debe tener al menos 6 caracteres.' });
         
         setIsLoading(true);
+        const toastId = toast.loading('Verificando tus datos...', {
+            description: 'Conectando con el servidor de TURUGOL'
+        });
 
         try {
             const res = await signInWithEmailAndPassword(auth, email, password);
@@ -61,22 +77,35 @@ const Login = () => {
                 await sendEmailVerification(user);
                 setVerificationSent(true);
                 setIsLoading(false);
-                return setServerError("Tu correo no está verificado. Se ha enviado un nuevo correo.");
+                const verifyMsg = "Tu correo no está verificado.";
+                setServerError(verifyMsg);
+                
+                // [MODIFICADO] De SweetAlert2 a Sonner descriptivo
+                toast.dismiss(toastId);
+                return toast.info('¡Casi listo!', {
+                    description: 'Tu cuenta no está activa. Enviamos un enlace de verificación. Revisa tu bandeja de entrada o spam.',
+                    duration: 8000
+                });
             }
 
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);
 
             if (!snap.exists()) {
-                setServerError("Error: Tu perfil de usuario no existe.");
+                const noProfileMsg = "No se encontró el perfil de usuario.";
+                setServerError(noProfileMsg);
+                toast.error('Perfil no encontrado', { id: toastId, description: noProfileMsg });
                 setIsLoading(false);
                 return;
             }
 
             const role = snap.data().role; 
             
-            // 4. LÓGICA DE REDIRECCIÓN INTELIGENTE (Corregida con delay para sincronizar)
-            // Usamos un delay de 600ms para asegurar que los observadores de sesión global se limpien
+            toast.success('¡Acceso concedido!', { 
+                id: toastId,
+                description: 'Bienvenido de nuevo a TURUGOL.'
+            });
+            
             setTimeout(() => {
                 if (from) {
                     navigate(from, { replace: true });
@@ -89,11 +118,11 @@ const Login = () => {
         } catch (error) {
             handleFirebaseError(error);
             setIsLoading(false);
+            toast.dismiss(toastId);
         }
     };
 
     const handleForgotPassword = () => {
-        // Redirigimos a la página de recuperación
         navigate('/forgot-password');
     };
 
@@ -125,17 +154,7 @@ const Login = () => {
                 <div className="bg-white py-8 px-4 shadow-lg rounded-2xl sm:px-10 border border-gray-100">
                     <form className="space-y-6" onSubmit={handleSubmit}>
                         
-                        {verificationSent && (
-                            <div className="p-3 text-sm bg-blue-100 border border-blue-400 text-blue-700 rounded-lg text-center">
-                                ¡Correo enviado! Revisa tu bandeja de entrada o spam.
-                            </div>
-                        )}
-                        {serverError && (
-                            <div className="p-3 text-sm bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                                <p className="font-bold">Error de Acceso:</p>
-                                {serverError}
-                            </div>
-                        )}
+                        {/* [LIMPIEZA] Se eliminaron los bloques de mensajes fijos (divs) */}
 
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">

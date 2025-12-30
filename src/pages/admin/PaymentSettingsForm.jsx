@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
+// [NUEVO] Importación exclusiva de Sonner
+import { toast } from 'sonner';
+
 const PaymentSettingsForm = () => {
     const [paymentConfig, setPaymentConfig] = useState({
         accountNumber: '',
@@ -35,30 +38,40 @@ const PaymentSettingsForm = () => {
     const handleSavePaymentConfig = async (e) => {
         e.preventDefault();
 
-        // VALIDACIONES DE LONGITUD EXACTA
+        // [MODIFICADO] Validaciones con Sonner (No invasivas)
         if (paymentConfig.accountNumber.length !== 16) {
-            alert('El número de tarjeta debe tener exactamente 16 dígitos.');
-            return;
+            return toast.warning('Datos incompletos', { 
+                description: 'El número de tarjeta debe tener 16 dígitos.' 
+            });
         }
         if (paymentConfig.phoneNumber.length !== 10) {
-            alert('El número de celular debe tener exactamente 10 dígitos.');
-            return;
+            return toast.warning('Datos incompletos', { 
+                description: 'El número de celular debe tener 10 dígitos.' 
+            });
         }
         if (!paymentConfig.bankName || paymentConfig.bankName.length < 3) {
-            alert('Por favor ingresa un nombre de banco válido.');
-            return;
+            return toast.warning('Campo requerido', { 
+                description: 'Ingresa un nombre de banco válido.' 
+            });
         }
 
         setIsSavingConfig(true);
-        try {
-            await setDoc(doc(db, 'settings', 'payment'), paymentConfig);
-            alert('Datos del banner de pago actualizados correctamente.');
-        } catch (error) {
-            console.error("Error al guardar config:", error);
-            alert('No se pudo actualizar la información.');
-        } finally {
-            setIsSavingConfig(false);
-        }
+
+        // [NUEVO] Uso de toast.promise para manejar todo el flujo de Firebase
+        const savePromise = setDoc(doc(db, 'settings', 'payment'), paymentConfig);
+
+        toast.promise(savePromise, {
+            loading: 'Guardando configuración de pago...',
+            success: () => {
+                setIsSavingConfig(false);
+                return '¡Configuración actualizada correctamente!';
+            },
+            error: (err) => {
+                setIsSavingConfig(false);
+                console.error("Error al guardar config:", err);
+                return 'No se pudo actualizar la información.';
+            },
+        });
     };
 
     // Validación: Solo números
@@ -69,7 +82,7 @@ const PaymentSettingsForm = () => {
         }
     };
 
-    // Validación genérica para texto: Solo letras y espacios (sin números ni símbolos)
+    // Validación genérica para texto: Solo letras y espacios
     const handleTextChange = (e, field, maxLength) => {
         const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ''); 
         if (value.length <= maxLength) {
@@ -105,7 +118,7 @@ const PaymentSettingsForm = () => {
                         className="w-full mt-1 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                         value={paymentConfig.bankName || ''}
                         onChange={(e) => handleTextChange(e, 'bankName', 30)}
-                        placeholder="Nombre del banco (Solo letras)"
+                        placeholder="Nombre del banco"
                         required
                     />
                 </div>
