@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { countryData } from '../../../constants/countries'; // Importamos el diccionario
 
 const LeagueSelector = ({ 
     leagues, 
@@ -13,13 +14,19 @@ const LeagueSelector = ({
     handleLeagueClick, 
     selectedLeagueId 
 }) => {
-    // Agrupación de ligas por país para el gestor
+    const [filterRegion, setFilterRegion] = useState('All');
+
+    // Agrupación de ligas por país traducido
     const groupedLeagues = apiLeaguesResults.reduce((acc, item) => {
-        const country = item.country.name;
-        if (!acc[country]) acc[country] = [];
-        acc[country].push(item);
+        const countryEnglish = item.country.name;
+        const translation = countryData[countryEnglish]?.name || countryEnglish;
+        
+        if (!acc[translation]) acc[translation] = [];
+        acc[translation].push(item);
         return acc;
     }, {});
+
+    const sortedCountries = Object.keys(groupedLeagues).sort((a, b) => a.localeCompare(b));
 
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -31,44 +38,80 @@ const LeagueSelector = ({
                 <button 
                     type="button" 
                     onClick={() => setIsManagingLeagues(!isManagingLeagues)}
-                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 transition-all"
+                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg border border-blue-100 transition-all flex items-center"
                 >
-                    <i className={`fas ${isManagingLeagues ? 'fa-check mr-2' : 'fa-cog mr-2'}`}></i>
-                    {isManagingLeagues ? 'Listo' : 'Gestionar Ligas'}
+                    <i className={`fas ${isManagingLeagues ? 'fa-check mr-2' : 'fa-plus-circle mr-2'}`}></i>
+                    {isManagingLeagues ? 'Finalizar Selección' : 'Añadir Nuevas Ligas'}
                 </button>
             </div>
 
             {isManagingLeagues && (
-                <div className="mb-6 p-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 animate-in fade-in zoom-in-95 duration-300">
-                    <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Añadir ligas desde la API</h4>
-                        <input 
-                            type="text" 
-                            placeholder="Filtrar por país..." 
-                            className="text-[10px] px-2 py-1 border rounded outline-none focus:ring-1 focus:ring-blue-400"
-                            onChange={(e) => setSearchApiLeague(e.target.value)}
-                        />
+                <div className="mb-6 p-5 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+                        <div className="flex items-center gap-2">
+                            <i className="fas fa-search text-slate-400 text-sm"></i>
+                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Buscador Global</h4>
+                        </div>
+                        
+                        <div className="flex gap-3 w-full md:w-auto">
+                            <select 
+                                className="text-[11px] px-3 py-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-400 font-bold text-slate-700 shadow-sm"
+                                value={filterRegion}
+                                onChange={(e) => setFilterRegion(e.target.value)}
+                            >
+                                <option value="All">Todos los Continentes</option>
+                                <option value="América">América</option>
+                                <option value="Europa">Europa</option>
+                                <option value="África">África</option>
+                                <option value="Asia">Asia</option>
+                                <option value="Mundo">Internacional / Mundo</option>
+                            </select>
+
+                            <input 
+                                type="text" 
+                                placeholder="Escribe país o nombre de liga..." 
+                                className="text-[11px] px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 flex-1 md:w-64 shadow-sm"
+                                onChange={(e) => setSearchApiLeague(e.target.value)}
+                            />
+                        </div>
                     </div>
-                    <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+
+                    <div className="space-y-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                         {isSearchingLeagues ? (
-                            <p className="text-xs text-center py-4">Cargando ligas...</p>
+                            <div className="flex flex-col items-center py-12">
+                                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sincronizando con la API...</p>
+                            </div>
                         ) : (
-                            Object.keys(groupedLeagues).filter(country => 
-                                country.toLowerCase().includes(searchApiLeague.toLowerCase()) || 
-                                groupedLeagues[country].some(l => l.league.name.toLowerCase().includes(searchApiLeague.toLowerCase()))
-                            ).map(country => (
-                                <div key={country}>
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">{country}</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {groupedLeagues[country].filter(item => 
-                                            item.league.name.toLowerCase().includes(searchApiLeague.toLowerCase()) || country.toLowerCase().includes(searchApiLeague.toLowerCase())
-                                        ).map(item => (
-                                            <div key={item.league.id} className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm">
-                                                <div className="flex items-center gap-2 overflow-hidden">
-                                                    <img src={item.league.logo} className="h-6 w-6 object-contain" alt="" />
-                                                    <span className="text-[10px] font-bold truncate">{item.league.name}</span>
+                            sortedCountries.filter(countryName => {
+                                const entry = Object.entries(countryData).find(([eng, data]) => data.name === countryName);
+                                const region = entry ? entry[1].region : 'Otros';
+                                const matchesSearch = countryName.toLowerCase().includes(searchApiLeague.toLowerCase()) || 
+                                                     groupedLeagues[countryName].some(l => l.league.name.toLowerCase().includes(searchApiLeague.toLowerCase()));
+                                const matchesRegion = filterRegion === 'All' || region === filterRegion;
+                                return matchesSearch && matchesRegion;
+                            }).map(country => (
+                                <div key={country} className="animate-in fade-in duration-500">
+                                    <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-3 flex items-center bg-blue-50/50 py-1 px-3 rounded-full w-fit">
+                                        {country}
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {groupedLeagues[country].map(item => (
+                                            <div key={item.league.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all group">
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <img src={item.league.logo} className="h-10 w-10 object-contain group-hover:scale-110 transition-transform" alt="" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[11px] font-bold text-slate-800 leading-none mb-1">{item.league.name}</span>
+                                                        <span className="text-[9px] text-slate-400 font-medium">Temporada {item.seasons[0].year}</span>
+                                                    </div>
                                                 </div>
-                                                <button type="button" onClick={() => addLeague(item)} className="text-blue-500 hover:text-blue-700"><i className="fas fa-plus-circle"></i></button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => addLeague(item)} 
+                                                    className="text-blue-500 hover:text-blue-700 p-2 hover:bg-blue-50 rounded-full transition-all active:scale-90"
+                                                >
+                                                    <i className="fas fa-plus-circle text-xl"></i>
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
@@ -79,34 +122,39 @@ const LeagueSelector = ({
                 </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {leagues.map(league => (
-                    <div key={league.id} className="relative group">
-                        <button
-                            type="button"
-                            onClick={() => handleLeagueClick(league.id)}
-                            className={`w-full flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
-                                selectedLeagueId === league.id 
-                                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm scale-[1.02]' 
-                                : 'border-gray-100 bg-white hover:border-blue-200'
-                            }`}
-                        >
-                            <img src={league.logo} alt="" className="h-10 object-contain mb-2" />
-                            <span className={`font-black text-[10px] tracking-tighter text-center uppercase ${selectedLeagueId === league.id ? 'text-blue-700' : 'text-gray-400'}`}>
-                                {league.nameShort}
-                            </span>
-                        </button>
-                        {isManagingLeagues && (
-                            <button 
+            {/* CONTENEDOR DE CUADRÍCULA 4 COLUMNAS x 2 FILAS VISIBLES */}
+            <div className="max-h-[440px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {leagues.map(league => (
+                        <div key={league.id} className="relative group">
+                            <button
                                 type="button"
-                                onClick={() => removeLeague(league.id)}
-                                className="absolute -top-2 -right-2 bg-white text-red-500 w-6 h-6 rounded-full flex items-center justify-center shadow-md border border-red-100"
+                                onClick={() => handleLeagueClick(league.id)}
+                                className={`w-full h-full flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all duration-300 ${
+                                    selectedLeagueId === league.id 
+                                    ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-100 shadow-xl scale-[1.02]' 
+                                    : 'border-gray-100 bg-white hover:border-blue-200 hover:shadow-lg'
+                                }`}
                             >
-                                <i className="fas fa-trash-alt text-[10px]"></i>
+                                <div className="bg-white p-3 rounded-2xl shadow-sm mb-3">
+                                    <img src={league.logo} alt="" className="h-20 w-20 object-contain drop-shadow-md" />
+                                </div>
+                                <span className={`font-black text-xs tracking-tight text-center uppercase leading-tight px-1 ${selectedLeagueId === league.id ? 'text-blue-700' : 'text-gray-500'}`}>
+                                    {league.name}
+                                </span>
                             </button>
-                        )}
-                    </div>
-                ))}
+                            {isManagingLeagues && (
+                                <button 
+                                    type="button"
+                                    onClick={() => removeLeague(league.id)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white w-9 h-9 rounded-full flex items-center justify-center shadow-lg border-2 border-white hover:bg-red-600 hover:scale-110 transition-all z-10"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

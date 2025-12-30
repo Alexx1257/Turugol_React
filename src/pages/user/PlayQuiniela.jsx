@@ -96,7 +96,7 @@ const PlayQuiniela = () => {
                 combinations,
                 createdAt: serverTimestamp(),
                 status: 'active',
-                puntos: 0,
+                points: 0, // [MODIFICADO] de 'puntos' a 'points' para coincidir con las reglas de Firebase
                 paymentStatus: 'pending' 
             });
             setShowPaymentBanner(true);
