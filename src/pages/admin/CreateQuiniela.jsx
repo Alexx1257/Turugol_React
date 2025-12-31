@@ -1,3 +1,4 @@
+// src/pages/admin/CreateQuiniela.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db, auth } from '../../firebase/config'; 
 import { doc, setDoc, getDoc, deleteDoc, collection } from 'firebase/firestore'; 
@@ -61,7 +62,7 @@ const CreateQuiniela = () => {
     const initialLoadRef = useRef(true); 
     const isSubmittingRef = useRef(false);
 
-    // --- [RESTAURADO] PERSISTENCIA CENTRALIZADA CON NOTIFICACIONES ---
+    // --- PERSISTENCIA CENTRALIZADA CON NOTIFICACIONES ---
     const getBorradorRef = (uid) => doc(db, QUINIELA_BORRADORES_COLLECTION, uid);
 
     const persistDraft = async (overrides = {}, silent = false) => {
@@ -92,7 +93,28 @@ const CreateQuiniela = () => {
         }
     };
 
-    // --- LÓGICA DE LIGAS (MANTENIDA) ---
+    // --- LÓGICA DE AUTO-SET DEADLINE ---
+    const autoSetDeadline = () => {
+        if (selectedFixtures.length === 0) {
+            toast.error("Selecciona al menos un partido primero");
+            return;
+        }
+        const dates = selectedFixtures.map(f => new Date(f.fixture.date).getTime());
+        const minDate = new Date(Math.min(...dates));
+        const suggestedDate = new Date(minDate.getTime() - (60 * 60 * 1000));
+
+        const year = suggestedDate.getFullYear();
+        const month = String(suggestedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(suggestedDate.getDate()).padStart(2, '0');
+        const hours = String(suggestedDate.getHours()).padStart(2, '0');
+        const minutes = String(suggestedDate.getMinutes()).padStart(2, '0');
+
+        const formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+        setDeadline(formattedDate);
+        toast.success("Hora sugerida establecida (1h antes del inicio)");
+    };
+
+    // --- LÓGICA DE LIGAS ---
     const loadLeaguesFromApi = async () => {
         const CACHE_KEY = 'api_leagues_cache';
         const CACHE_TIME_KEY = 'api_leagues_cache_time';
@@ -123,20 +145,24 @@ const CreateQuiniela = () => {
             id: item.league.id, name: item.league.name, logo: item.league.logo,
             nameShort: item.league.name.substring(0, 12).toUpperCase(),
         };
-        setLeagues(prev => [...prev, newLeague]);
+        const updatedLeagues = [...leagues, newLeague];
+        setLeagues(updatedLeagues);
+        persistDraft({ leagues: updatedLeagues });
         toast.success('Liga añadida');
     };
 
     const removeLeague = (id) => {
         if (leagues.length <= 1) return toast.error('Mínimo una liga');
-        setLeagues(prev => prev.filter(l => l.id !== id));
+        const updatedLeagues = leagues.filter(l => l.id !== id);
+        setLeagues(updatedLeagues);
         if (selectedLeagueId === id) setSelectedLeagueId(null);
+        persistDraft({ leagues: updatedLeagues });
         toast.info('Liga eliminada');
     };
 
     useEffect(() => { if (isManagingLeagues && apiLeaguesResults.length === 0) loadLeaguesFromApi(); }, [isManagingLeagues]);
 
-    // --- CARGA INICIAL Y LIMPIEZA ---
+    // --- CARGA INICIAL ---
     useEffect(() => {
         if (!currentAdminId) return; 
         const loadInitialDraft = async () => {
@@ -151,10 +177,7 @@ const CreateQuiniela = () => {
                     if (d.leagues) setLeagues(d.leagues);
                     setSelectedLeagueId(d.selectedLeagueId || null);
                     if (d.selectedRound) setSelectedRound(d.selectedRound);
-                } else {
-                    setSelectedLeagueId(null);
-                    setSelectedRound('');
-                    setApiFixtures([]);
+                    if (d.deadline) setDeadline(d.deadline);
                 }
             } catch (error) { console.error(error); }
             finally { initialLoadRef.current = false; }
@@ -162,7 +185,7 @@ const CreateQuiniela = () => {
         loadInitialDraft();
     }, [currentAdminId]); 
 
-    // Auto-guardado silencioso para textos
+    // Auto-guardado silencioso para campos de texto y config
     useEffect(() => {
         if (initialLoadRef.current || !currentAdminId || isSubmittingRef.current) return; 
         setIsSaving(true);
@@ -173,7 +196,7 @@ const CreateQuiniela = () => {
         return () => clearTimeout(timer); 
     }, [title, description, deadline, maxFixtures]);
 
-    // --- API FIXTURES ---
+    // --- LÓGICA DE RONDAS Y FIXTURES ---
     useEffect(() => {
         const fetchRoundsForLeague = async () => {
             if (!selectedLeagueId || initialLoadRef.current) return;
@@ -218,10 +241,10 @@ const CreateQuiniela = () => {
     const handleLeagueClick = (leagueId) => {
         if (leagueId !== selectedLeagueId) {
             setSelectedLeagueId(leagueId); setSelectedRound(''); setApiFixtures([]); 
+            persistDraft({ selectedLeagueId: leagueId, selectedRound: '' });
         }
     };
 
-    // [MODIFICADO] Persistencia inmediata con notificación al tocar partidos
     const toggleFixtureSelection = (fixtureData) => {
         setSelectedFixtures(prev => {
             const isSelected = prev.some(f => f.fixture.id === fixtureData.fixture.id);
@@ -259,7 +282,7 @@ const CreateQuiniela = () => {
         const createPromise = async () => {
             await setDoc(doc(collection(db, QUINIELAS_FINAL_COLLECTION)), quinielaPayload);
             await deleteDoc(getBorradorRef(currentAdminId));
-            setTitle(''); setDescription(''); setSelectedFixtures([]); setSelectedLeagueId(null);
+            setTitle(''); setDescription(''); setSelectedFixtures([]); setSelectedLeagueId(null); setDeadline('');
         };
         toast.promise(createPromise(), {
             loading: 'Publicando quiniela...', success: '¡Quiniela creada!', error: 'Error al guardar.',
@@ -299,6 +322,7 @@ const CreateQuiniela = () => {
                     <QuinielaConfig 
                         title={title} deadline={deadline} description={description} maxFixtures={maxFixtures}
                         handleInputChange={handleInputChange} MAX_DESCRIPTION_CHARS={MAX_DESCRIPTION_CHARS}
+                        onAutoSetDeadline={autoSetDeadline}
                     />
                     <FixturePicker 
                         isLoading={isLoading} filteredFixtures={filteredFixtures} selectedFixtures={selectedFixtures}

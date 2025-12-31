@@ -3,26 +3,23 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../../firebase/config';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { fetchFromApi } from '../../../services/footballApi';
+import { toast } from 'sonner'; 
+import Swal from 'sweetalert2'; // [NUEVO] Importación de SweetAlert2
 
 const ResultsManager = () => {
-    // [CORRECCIÓN] Capturamos quinielaId para coincidir con la nueva ruta en App.jsx
+    // Se utiliza quinielaId para mantener la compatibilidad con las rutas de App.jsx
     const { quinielaId } = useParams(); 
     const navigate = useNavigate();
     
-    // Estados principales
     const [quiniela, setQuiniela] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editingScores, setEditingScores] = useState({});
-    
-    // Estados de proceso
     const [isSyncing, setIsSyncing] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
 
-    // 1. Cargar la Quiniela específica al montar
     useEffect(() => {
         const fetchQuiniela = async () => {
-            // [SEGURIDAD] Si no hay ID, no intentamos cargar
             if (!quinielaId) return;
 
             try {
@@ -33,7 +30,6 @@ const ResultsManager = () => {
                     const data = { id: docSnap.id, ...docSnap.data() };
                     setQuiniela(data);
                     
-                    // Inicializar los scores locales con lo que ya existe en DB
                     const initialScores = {};
                     if (data.fixtures) {
                         data.fixtures.forEach(fixture => {
@@ -47,11 +43,12 @@ const ResultsManager = () => {
                     }
                     setEditingScores(initialScores);
                 } else {
-                    console.error("Quiniela no encontrada con ID:", quinielaId);
+                    toast.error("Quiniela no encontrada");
                     navigate('/dashboard/admin/quinielas');
                 }
             } catch (error) {
                 console.error("Error cargando quiniela:", error);
+                toast.error("Error al cargar los datos del evento");
             } finally {
                 setLoading(false);
             }
@@ -60,17 +57,17 @@ const ResultsManager = () => {
         fetchQuiniela();
     }, [quinielaId, navigate]);
 
-    // --- LÓGICA DE NEGOCIO ---
-
     const toggleLock = (fixtureId) => {
         if (!quiniela) return;
 
         const updatedFixtures = quiniela.fixtures.map(f => {
             if (f.id === fixtureId) {
+                const newLockStatus = !f.isLocked;
+                toast.info(newLockStatus ? "Partido bloqueado" : "Partido desbloqueado");
                 return { 
                     ...f, 
-                    isLocked: !f.isLocked,
-                    lockedAt: !f.isLocked ? new Date().toISOString() : null
+                    isLocked: newLockStatus,
+                    lockedAt: newLockStatus ? new Date().toISOString() : null
                 };
             }
             return f;
@@ -105,6 +102,8 @@ const ResultsManager = () => {
     const syncWithApi = async () => {
         if (!quiniela) return;
         setIsSyncing(true);
+        const loadingToast = toast.loading("Sincronizando con la API...");
+
         try {
             const promises = quiniela.fixtures.map(async (fixture) => {
                 if (fixture.isLocked) return { skipped: true, fixture: { id: fixture.id } };
@@ -135,10 +134,14 @@ const ResultsManager = () => {
             
             setEditingScores(newScores);
             setQuiniela({ ...quiniela, fixtures: updatedFixturesLocal });
-            alert(`Sincronización completada. ${updatesCount} actualizados.`);
+            
+            toast.success(`Sincronización lista: ${updatesCount} partidos actualizados`, {
+                id: loadingToast,
+                description: skippedCount > 0 ? `${skippedCount} omitidos por candado.` : null
+            });
 
         } catch (error) {
-            alert("Error al conectar con la API.");
+            toast.error("Error al conectar con la API", { id: loadingToast });
         } finally {
             setIsSyncing(false);
         }
@@ -146,10 +149,24 @@ const ResultsManager = () => {
 
     const saveResultsAndCalculate = async () => {
         if (!quiniela) return;
-        if (!window.confirm("¿Calcular puntos de todos los usuarios?")) return;
+        
+        // [NUEVO] Integración de SweetAlert2 para la confirmación
+        const result = await Swal.fire({
+            title: '¿Confirmas el cálculo de puntos?',
+            text: "Esta acción es irreversible y actualizará el ranking de todos los participantes.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Sí, guardar y calcular',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if (!result.isConfirmed) return;
 
         setIsProcessing(true);
         setStatusMessage("Guardando resultados...");
+        const processingToast = toast.loading("Procesando puntos de usuarios...");
 
         try {
             const quinielaRef = doc(db, 'quinielas', quiniela.id);
@@ -181,12 +198,11 @@ const ResultsManager = () => {
             const participationsSnapshot = await getDocs(q);
 
             if (participationsSnapshot.empty) {
-                alert("Guardado. No había participantes.");
+                toast.info("Guardado, pero no se encontraron participaciones.", { id: processingToast });
                 setIsProcessing(false);
                 return;
             }
 
-            setStatusMessage(`Procesando ${participationsSnapshot.size} usuarios...`);
             const BATCH_SIZE = 400;
             let batch = writeBatch(db);
             let counter = 0;
@@ -221,11 +237,13 @@ const ResultsManager = () => {
             }
 
             if (counter > 0) await batch.commit();
-            alert(`¡Éxito!`);
+            
+            toast.success("Resultados y puntos procesados con éxito", { id: processingToast });
             navigate(`/dashboard/admin/quinielas/${quinielaId}`);
 
         } catch (error) {
-            alert("Error al guardar.");
+            console.error(error);
+            toast.error("Error crítico al procesar resultados", { id: processingToast });
         } finally {
             setIsProcessing(false);
             setStatusMessage('');
@@ -241,7 +259,6 @@ const ResultsManager = () => {
 
     return (
         <div className="max-w-5xl mx-auto p-4 lg:p-8">
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-200 pb-4">
                 <div>
                     <Link to={`/dashboard/admin/quinielas/${quinielaId}`} className="text-gray-500 hover:text-gray-800 text-sm mb-1 inline-flex items-center">
@@ -256,20 +273,12 @@ const ResultsManager = () => {
                         {isSyncing ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-magic"></i>} 
                         Sincronizar API
                     </button>
-                    <button onClick={saveResultsAndCalculate} disabled={isProcessing} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 shadow-lg shadow-green-200 disabled:opacity-50">
+                    <button onClick={saveResultsAndCalculate} disabled={isProcessing} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 shadow-lg shadow-green-200 disabled:opacity-50 transition-all">
                         {isProcessing ? 'Procesando...' : 'Guardar y Calcular'}
                     </button>
                 </div>
             </div>
 
-            {isProcessing && (
-                <div className="mb-6 bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center animate-pulse border border-blue-200">
-                    <i className="fas fa-cog fa-spin mr-3 text-xl"></i>
-                    <span className="font-bold">{statusMessage}</span>
-                </div>
-            )}
-
-            {/* Lista de Partidos */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
                     <h3 className="font-bold text-gray-700">Marcadores Oficiales</h3>
