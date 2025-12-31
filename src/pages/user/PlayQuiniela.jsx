@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { db, auth } from '../../firebase/config';
 import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import PaymentBanner from '../admin/quinielas/PaymentBanner';
-import FixtureList from './FixtureList'; 
-import QuinielaSummary from './QuinielaSummary'; 
+import FixtureList from './FixtureList'; // Importar nuevo
+import QuinielaSummary from './QuinielaSummary'; // Importar nuevo
 
 const PlayQuiniela = () => {
     const { quinielaId } = useParams();
@@ -75,6 +75,7 @@ const PlayQuiniela = () => {
             return alert("Debes completar todos los partidos.");
         }
 
+        // VALIDACIÓN DE LÍMITES AL CONFIRMAR
         if (triples > MAX_TRIPLES) {
             return alert(`No es posible guardar la quiniela porque se excede el límite permitido de triples. Tienes ${triples} y el máximo es ${MAX_TRIPLES}.`);
         }
@@ -95,7 +96,7 @@ const PlayQuiniela = () => {
                 combinations,
                 createdAt: serverTimestamp(),
                 status: 'active',
-                puntos: 0, 
+                puntos: 0, // [CORREGIDO] de 'points' a 'puntos' para cumplir con las reglas de Firebase
                 paymentStatus: 'pending' 
             });
             setShowPaymentBanner(true);
@@ -120,6 +121,7 @@ const PlayQuiniela = () => {
 
             <div className={`flex flex-col lg:flex-row gap-8 items-start transition-opacity duration-500 ${showPaymentBanner ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
                 
+                {/* --- COLUMNA IZQUIERDA --- */}
                 <div className="lg:w-2/3 w-full">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
                         <h1 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">{quiniela?.metadata?.title}</h1>
@@ -134,6 +136,7 @@ const PlayQuiniela = () => {
                     />
                 </div>
 
+                {/* --- COLUMNA DERECHA --- */}
                 <div className="lg:w-1/3 w-full space-y-6">
                     <QuinielaSummary 
                         totalCost={totalCost}
