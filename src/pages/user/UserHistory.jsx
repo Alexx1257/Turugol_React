@@ -83,7 +83,6 @@ const UserHistory = () => {
 
     const getResultColor = (userPick, officialOutcome) => {
         if (!officialOutcome) return 'bg-gray-100 text-gray-500 border-gray-200';
-        // MODIFICACIÓN: Soporte para array en la lógica de colores
         const isHit = Array.isArray(userPick) ? userPick.includes(officialOutcome) : userPick === officialOutcome;
         if (isHit) return 'bg-green-100 text-green-700 border-green-200';
         return 'bg-red-50 text-red-600 border-red-100 opacity-75';
@@ -109,12 +108,10 @@ const UserHistory = () => {
                                     Q
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
-                                    {/* Insignia Estado Juego */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.status === 'finalized' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}>
                                         {part.status === 'finalized' ? 'FINALIZADA' : 'EN JUEGO'}
                                     </span>
                                     
-                                    {/* Insignia Estado PAGO */}
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${part.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                         {part.paymentStatus === 'paid' ? 'PAGADO $$' : 'PAGO PENDIENTE'}
                                     </span>
@@ -127,7 +124,7 @@ const UserHistory = () => {
                             <div className="flex justify-between items-end">
                                 <div className="text-center">
                                     <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Aciertos</p>
-                                    <p className="text-2xl font-black text-gray-800">{part.puntos !== undefined ? part.puntos : '-'}</p>
+                                    <p className="text-2xl font-black text-gray-800">{part.puntos !== undefined ? part.puntos : '0'}</p>
                                 </div>
                                 
                                 <div className="flex gap-2">
@@ -163,11 +160,11 @@ const UserHistory = () => {
                             </button>
                         </div>
 
-                        {/* BANNER DE PAGO CONDICIONAL - REUTILIZADO CON hideButton={true} */}
+                        {/* BANNER DE PAGO CORREGIDO: Se usa totalCost y se hereda el blindaje de 6 caracteres */}
                         {selectedParticipation.paymentStatus !== 'paid' && (
                             <div className="mb-8 transform scale-95 md:scale-100 origin-top">
                                 <PaymentBanner 
-                                    totalCost={selectedParticipation.costo || 10} 
+                                    totalCost={selectedParticipation.totalCost || 100} 
                                     onNavigate={closeDetails} 
                                     hideButton={true}
                                 />
@@ -192,10 +189,8 @@ const UserHistory = () => {
 
                                 <div className="max-h-[40vh] md:max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                                     {selectedQuinielaDetails.fixtures.map((fixture) => {
-                                        // MODIFICACIÓN: Las predicciones ahora son arrays
                                         const userPicks = selectedParticipation.predictions[fixture.id] || [];
                                         const officialOutcome = fixture.outcome;
-                                        // MODIFICACIÓN: Comprobar si el resultado oficial está dentro de los picks del usuario
                                         const isHit = officialOutcome && Array.isArray(userPicks) && userPicks.includes(officialOutcome);
                                         const statusClass = getResultColor(userPicks, officialOutcome);
 
@@ -212,7 +207,6 @@ const UserHistory = () => {
                                                     </div>
                                                 </div>
                                                 <div className="col-span-3 flex flex-col items-center justify-center text-center">
-                                                    {/* MODIFICACIÓN: Formatear múltiples picks con translatePick */}
                                                     <span className="text-[10px] md:text-xs font-black uppercase text-gray-700 leading-tight">
                                                         {Array.isArray(userPicks) 
                                                             ? userPicks.map(p => translatePick(p)).join(' / ') 

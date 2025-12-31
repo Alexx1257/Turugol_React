@@ -22,6 +22,7 @@ const Register = () => {
         firstName: '',
         lastName: '',
         email: '',
+        phone: '', 
         username: '',
         password: '',
         confirmPassword: '',
@@ -46,6 +47,19 @@ const Register = () => {
         message: '',
         color: ''
     });
+
+    // [NUEVO] Configuración de límites
+    const MAX_NAME_LENGTH = 25;
+
+    // [NUEVO] Función para limpiar nombres (solo letras y espacios)
+    const sanitizeName = (value) => {
+        return value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    };
+
+    // [NUEVO] Función para limpiar teléfono (solo números)
+    const sanitizePhone = (value) => {
+        return value.replace(/\D/g, '');
+    };
 
     const checkPasswordStrength = (password) => {
         let score = 0;
@@ -89,7 +103,18 @@ const Register = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        
+        let finalValue = value;
+        
+        // [MODIFICADO] Blindaje con límites de caracteres
+        if (name === 'firstName' || name === 'lastName') {
+            finalValue = sanitizeName(value).substring(0, MAX_NAME_LENGTH);
+        } else if (name === 'phone') {
+            finalValue = sanitizePhone(value).substring(0, 10);
+        }
+
+        setFormData(prev => ({ ...prev, [name]: finalValue }));
+
         if (name === 'password') {
             checkPasswordStrength(value);
             checkPasswordMatch(value, formData.confirmPassword);
@@ -102,6 +127,11 @@ const Register = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setServerError('');
+
+        if (formData.phone.length < 10) {
+            toast.error('Teléfono inválido', { description: 'El número debe tener 10 dígitos.' });
+            return;
+        }
         
         if (passwordStrength.score < 3) {
             toast.error('Contraseña débil', { description: 'Asegúrate de cumplir con los requisitos de seguridad.' });
@@ -117,21 +147,23 @@ const Register = () => {
 
         try {
             const res = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-            await updateProfile(res.user, { displayName: `${formData.firstName} ${formData.lastName}` });
+            await updateProfile(res.user, { displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}` });
+            
             await setDoc(doc(db, 'users', res.user.uid), {
                 uid: res.user.uid,
-                name: `${formData.firstName} ${formData.lastName}`,
+                name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
                 username: formData.username.trim(),
                 email: res.user.email,
+                phone: formData.phone,
                 role: "user",
                 createdAt: new Date().toISOString()
             });
+            
             await sendEmailVerification(res.user, { url: window.location.origin + '/login' });
             
             setVerificationSent(true);
             setSuccessMessage('Cuenta creada. Verifica tu email.');
             
-            // [MODIFICADO] Uso exclusivo de Sonner para el éxito con aviso de SPAM
             toast.success('¡Registro exitoso!', {
                 id: toastId,
                 description: 'Revisa tu bandeja de entrada o carpeta de SPAM para activar tu cuenta. Redirigiendo...',
@@ -175,22 +207,28 @@ const Register = () => {
                 <div className="bg-white py-8 px-4 shadow-lg rounded-2xl sm:px-10 border border-gray-100">
                     <form className="space-y-6" onSubmit={handleSubmit}>
                         
-                        {/* Se eliminaron las alertas estáticas del JSX para usar notificaciones dinámicas */}
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fas fa-user text-gray-400"></i></div>
-                                    <input name="firstName" type="text" required value={formData.firstName} onChange={handleInputChange} className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-lg sm:text-sm" placeholder="Juan" />
+                                    <input name="firstName" type="text" required maxLength={MAX_NAME_LENGTH} value={formData.firstName} onChange={handleInputChange} className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-lg sm:text-sm" placeholder="Juan" />
                                 </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Apellido</label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fas fa-user text-gray-400"></i></div>
-                                    <input name="lastName" type="text" required value={formData.lastName} onChange={handleInputChange} className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-lg sm:text-sm" placeholder="Pérez" />
+                                    <input name="lastName" type="text" required maxLength={MAX_NAME_LENGTH} value={formData.lastName} onChange={handleInputChange} className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-lg sm:text-sm" placeholder="Pérez" />
                                 </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono (WhatsApp)</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fas fa-phone text-gray-400"></i></div>
+                                <input name="phone" type="text" required maxLength="10" value={formData.phone} onChange={handleInputChange} className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-lg sm:text-sm" placeholder="9611234567" />
                             </div>
                         </div>
 

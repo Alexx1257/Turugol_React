@@ -10,7 +10,6 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
         bankName: ''
     });
 
-    // Estado para almacenar el concepto generado
     const [paymentConcept, setPaymentConcept] = useState('');
 
     useEffect(() => {
@@ -21,19 +20,17 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
                     setConfig(configSnap.data());
                 }
 
-                // Generar concepto dinámico con datos del usuario actual
                 const currentUser = auth.currentUser;
                 if (currentUser) {
-                    const fullName = currentUser.displayName || "Usuario Anonimo";
+                    const fullName = currentUser.displayName || "Usuario";
+                    // MODIFICACIÓN DEFINITIVA: 6 caracteres del UID
                     const uidShort = currentUser.uid.substring(0, 6).toUpperCase();
                     
-                    // Extraer primer nombre y primer apellido
-                    const nameParts = fullName.split(' ');
-                    const firstName = nameParts[0] || "";
-                    const firstLastName = nameParts[1] || "";
+                    // Solo el primer nombre y limpieza de caracteres extraños para compatibilidad bancaria
+                    const firstName = fullName.split(' ')[0].replace(/[^a-zA-Z]/g, '') || "USER";
                     
-                    // Formato: NOMBRE APELLIDO UID6
-                    const generatedConcept = `${firstName} ${firstLastName} ${uidShort}`.trim().toUpperCase();
+                    // FORMATO FINAL: PRIMER NOMBRE + ESPACIO + 6 CARACTERES UID
+                    const generatedConcept = `${firstName} ${uidShort}`.trim().toUpperCase();
                     setPaymentConcept(generatedConcept);
                 }
             } catch (error) {
@@ -43,23 +40,16 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
         fetchPaymentData();
     }, []);
 
-    // Función mejorada para estilos de tarjeta con control de contraste
     const getBankStyles = (bank) => {
         const name = bank?.toLowerCase() || '';
-        // Retorna: [Clase de fondo, Clase de texto]
         if (name.includes('bbva')) return ['bg-gradient-to-br from-[#004481] to-[#043263]', 'text-white'];
         if (name.includes('santander')) return ['bg-gradient-to-br from-[#ec0000] to-[#b30000]', 'text-white'];
         if (name.includes('banamex')) return ['bg-gradient-to-br from-[#004684] to-[#002855]', 'text-white'];
         if (name.includes('azteca')) return ['bg-gradient-to-br from-[#1a4a3a] to-[#0d261d]', 'text-white'];
         if (name.includes('banorte')) return ['bg-gradient-to-br from-[#eb0029] to-[#000000]', 'text-white'];
         if (name.includes('hsbc')) return ['bg-gradient-to-br from-[#db0011] to-[#ffffff] border-2 border-red-600', 'text-white'];
-        
-        // Ajuste específico para Coppel (Amarillo con texto azul marino para legibilidad)
         if (name.includes('coppel')) return ['bg-gradient-to-br from-[#f2ce00] to-[#e5b800]', 'text-[#004b98]'];
-        
         if (name.includes('nu')) return ['bg-gradient-to-br from-[#820ad1] to-[#4c0677]', 'text-white'];
-        
-        // Default: Elegante oscuro
         return ['bg-gradient-to-br from-[#1e293b] to-[#0f172a]', 'text-white'];
     };
 
@@ -75,17 +65,16 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
                 
                 <div className="flex flex-col xl:flex-row gap-10 relative z-10">
-                    
                     <div className="flex flex-col gap-6 items-center">
-                        {/* Tarjeta con colores dinámicos aplicados */}
                         <div className={`w-full max-w-[380px] h-[220px] rounded-2xl shadow-2xl p-6 flex flex-col justify-between transition-all duration-700 transform hover:rotate-1 ${bgStyle} ${textStyle}`}>
                             <div className="flex justify-between items-start">
                                 <div className="flex flex-col">
                                     <span className={`text-[10px] uppercase font-bold tracking-widest opacity-80 italic`}>Débito</span>
                                     <span className="text-xl font-black italic tracking-tighter uppercase">{config.bankName || 'Mi Banco'}</span>
                                 </div>
-                                <div className="w-10 h-7 bg-yellow-400/80 rounded flex flex-col gap-1 p-1 opacity-90 shadow-inner border border-yellow-600/20">
-                                    <div className="w-full h-full border border-yellow-600/30 rounded-sm"></div>
+                                <div className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg border border-white/30 text-right">
+                                    <p className="text-[8px] uppercase font-bold opacity-80">Total a Pagar</p>
+                                    <p className="text-lg font-black tracking-tight">${totalCost}</p>
                                 </div>
                             </div>
 
@@ -108,7 +97,6 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
                             </div>
                         </div>
 
-                        {/* RECUADRO DE CONCEPTO OBLIGATORIO */}
                         <div className="w-full max-w-[380px] bg-red-50 border-2 border-dashed border-red-200 p-5 rounded-2xl">
                             <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                                 <i className="fas fa-exclamation-triangle"></i> Concepto de Pago Obligatorio
@@ -134,12 +122,14 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
                         <div className="grid gap-4 mb-6">
                             <div className="flex gap-4 items-start">
                                 <div className="bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-1">1</div>
-                                <p className="text-sm text-gray-600 font-medium">Realiza la transferencia desde tu banca móvil a la cuenta mostrada en la tarjeta.</p>
+                                <p className="text-sm text-gray-600 font-medium">
+                                    Realiza la transferencia por <span className="font-black text-gray-800">${totalCost} MXN</span> a la cuenta mostrada.
+                                </p>
                             </div>
                             <div className="flex gap-4 items-start">
                                 <div className="bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-1">2</div>
                                 <p className="text-sm text-gray-600 font-medium">
-                                    Coloca <span className="text-red-600 font-bold underline">{paymentConcept}</span> como concepto. <span className="font-bold text-gray-800 italic text-xs block mt-1">Si el concepto es incorrecto o falta, tu jugada quedará ANULADA automáticamente aunque resultes ganador.</span>
+                                    Coloca <span className="text-red-600 font-bold underline">{paymentConcept}</span> como concepto. <span className="font-bold text-gray-800 italic text-xs block mt-1">Si el concepto es incorrecto o falta, tu jugada quedará ANULADA automáticamente.</span>
                                 </p>
                             </div>
                             <div className="flex gap-4 items-start">
@@ -150,7 +140,7 @@ const PaymentBanner = ({ totalCost, onNavigate, hideButton = false }) => {
 
                         <div className="flex flex-col sm:flex-row items-center gap-4">
                             <a 
-                                href={`https://wa.me/${config.phoneNumber?.replace(/\s/g, '')}?text=Hola, envío mi comprobante de pago. Concepto: ${paymentConcept}`}
+                                href={`https://wa.me/${config.phoneNumber?.replace(/\s/g, '')}?text=Hola, envío mi comprobante de pago por $${totalCost}. Concepto: ${paymentConcept}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="w-full sm:w-auto bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black hover:bg-emerald-600 transition-all shadow-lg flex items-center justify-center gap-3 uppercase text-xs tracking-widest"
