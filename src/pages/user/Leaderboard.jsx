@@ -4,52 +4,56 @@ import { db, auth } from '../../firebase/config';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 
 const Leaderboard = () => {
-    // 1. Detección ultra-flexible de ID (detecta quinielaId o id)
+    // Captura flexible para evitar errores de ruta entre admin y usuario
     const params = useParams();
-    const quinielaId = params.quinielaId || params.id; 
+    const quinielaId = (params.quinielaId || params.id)?.trim(); 
     
     const navigate = useNavigate();
     const [leaderboard, setLeaderboard] = useState([]);
     const [quinielaInfo, setQuinielaInfo] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isAdmin, setIsAdmin] = useState(false); // Estado para verificar si es admin
     const currentUser = auth.currentUser;
 
     useEffect(() => {
         const fetchLeaderboardData = async () => {
-            // Si no hay ID en absoluto, mostrar error claro
             if (!quinielaId) {
-                setError("No se detectó el identificador de la quiniela.");
+                setError("ID de quiniela no detectado.");
                 setLoading(false);
                 return;
             }
 
             try {
-                // 2. Intentar cargar info de la quiniela
+                // 1. Verificar si el usuario actual es admin para la visualización del UID
+                if (currentUser) {
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (userDoc.exists() && userDoc.data().role === 'admin') {
+                        setIsAdmin(true);
+                    }
+                }
+
+                // 2. Obtener información básica de la quiniela
                 const quinielaRef = doc(db, 'quinielas', quinielaId);
                 const quinielaSnap = await getDoc(quinielaRef);
                 
                 if (quinielaSnap.exists()) {
                     setQuinielaInfo(quinielaSnap.data());
                 } else {
-                    // Si no existe con ese ID, puede que sea un error de ruta
                     setError("La quiniela no existe o el ID es incorrecto.");
                     setLoading(false);
                     return;
                 }
 
-                // 3. Obtener Jugadores (CONSULTA CLAVE)
-                // Verificamos que quinielaId sea un string limpio
+                // 3. Obtener Jugadores ordenados por Puntos
                 const entriesRef = collection(db, 'userEntries');
                 const q = query(
                     entriesRef,
-                    where('quinielaId', '==', String(quinielaId).trim()), 
+                    where('quinielaId', '==', quinielaId),
                     orderBy('puntos', 'desc')
                 );
 
                 const snapshot = await getDocs(q);
-                
-                // Si el snapshot está vacío, el usuario "no aparece"
                 const data = snapshot.docs.map((doc, index) => ({
                     id: doc.id,
                     rank: index + 1,
@@ -67,8 +71,8 @@ const Leaderboard = () => {
             }
         };
 
-        if (quinielaId) fetchLeaderboardData();
-    }, [quinielaId]);
+        fetchLeaderboardData();
+    }, [quinielaId, currentUser]);
 
     const getRankIcon = (rank) => {
         if (rank === 1) return <i className="fas fa-medal text-yellow-400 text-xl"></i>;
@@ -112,9 +116,7 @@ const Leaderboard = () => {
                     </div>
                 ) : leaderboard.length === 0 ? (
                     <div className="p-12 text-center text-gray-400">
-                        <i className="fas fa-users-slash text-4xl mb-3 opacity-20"></i>
-                        <p className="font-medium">No se encontraron participaciones para esta quiniela.</p>
-                        <p className="text-xs mt-1 text-gray-400">Verifica si el pago fue aprobado o si ya enviaste tus pronósticos.</p>
+                        <p>Aún no hay participantes en esta quiniela.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -130,26 +132,37 @@ const Leaderboard = () => {
                             <tbody className="text-sm">
                                 {leaderboard.map((entry) => {
                                     const isMe = entry.userId === currentUser?.uid;
+                                    
                                     return (
-                                        <tr key={entry.id} className={`border-b border-gray-50 last:border-0 transition-colors ${isMe ? 'bg-emerald-50 font-semibold' : 'hover:bg-gray-50'}`}>
-                                            <td className="p-4 text-center">{getRankIcon(entry.rank)}</td>
+                                        <tr key={entry.id} className={`border-b border-gray-50 last:border-0 transition-colors ${isMe ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                                            <td className="p-4 text-center">
+                                                {getRankIcon(entry.rank)}
+                                            </td>
                                             <td className="p-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${isMe ? 'bg-emerald-500' : 'bg-indigo-400'}`}>
-                                                        {entry.userName?.charAt(0).toUpperCase() || '?'}
+                                                        {entry.userName ? entry.userName.charAt(0).toUpperCase() : '?'}
                                                     </div>
                                                     <div>
-                                                        <p className={`${isMe ? 'text-emerald-900' : 'text-gray-700'}`}>{entry.userName} {isMe && '(Tú)'}</p>
+                                                        <p className={`font-bold ${isMe ? 'text-emerald-900' : 'text-gray-700'}`}>
+                                                            {entry.userName} {isMe && '(Tú)'}
+                                                        </p>
+                                                        {/* [NUEVO] Muestra los primeros 6 dígitos del UID solo si es Admin */}
+                                                        {isAdmin && entry.userId && (
+                                                            <p className="text-[10px] text-gray-400 font-mono">
+                                                                ID: {entry.userId.substring(0, 6)}...
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="p-4 text-center">
-                                                <span className={`inline-block px-3 py-1 rounded-lg font-black text-lg min-w-[3rem] ${isMe ? 'bg-emerald-200 text-emerald-900' : 'bg-gray-100 text-gray-800'}`}>
+                                                <span className="inline-block px-3 py-1 bg-gray-100 rounded-lg font-black text-gray-800 text-lg min-w-[3rem]">
                                                     {entry.puntos || 0}
                                                 </span>
                                             </td>
                                             <td className="p-4 text-center hidden md:table-cell">
-                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${entry.status === 'finalized' ? 'text-green-600 bg-green-50 border border-green-100' : 'text-blue-600 bg-blue-50 border border-blue-100'}`}>
+                                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${entry.status === 'finalized' ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'}`}>
                                                     {entry.status === 'finalized' ? 'Finalizado' : 'En Juego'}
                                                 </span>
                                             </td>

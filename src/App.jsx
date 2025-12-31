@@ -1,11 +1,11 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom'; 
+import { Routes, Route, Navigate } from 'react-router-dom'; // Agregamos Navigate para redirecciones
 import Home from './pages/Home';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword'; 
+import ForgotPassword from './pages/ForgotPassword'; // [NUEVO] Importación recuperación
 
-// Importación de Sonner
+// [NUEVO] Importación de Sonner para notificaciones globales
 import { Toaster } from 'sonner';
 
 // Layouts
@@ -26,7 +26,7 @@ import CreateQuiniela from './pages/admin/CreateQuiniela';
 import ManageQuinielas from './pages/admin/ManageQuinielas'; 
 import UserManagement from './pages/admin/UserManagement';
 
-// Submódulos de quiniela
+// [NUEVO] Importamos los submódulos de quiniela
 import QuinielaDetail from './pages/admin/quinielas/QuinielaDetail';
 import ResultsManager from './pages/admin/quinielas/ResultsManager';
 import ParticipantsManager from './pages/admin/quinielas/ParticipantsManager';
@@ -36,6 +36,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 function App() {
     return (
         <div className="App">
+            {/* [NUEVO] Componente Toaster: Controla la aparición de notificaciones tipo Toast */}
             <Toaster position="top-right" richColors closeButton />
 
             <Routes>
@@ -62,22 +63,17 @@ function App() {
                     <Route element={<AdminLayout />}>
                         <Route path="/dashboard/admin" element={<AdminDashboardPage />} />
                         <Route path="/dashboard/admin/users" element={<UserManagement />} /> 
-                        
-                        {/* Creación */}
                         <Route path="/dashboard/admin/create" element={<CreateQuiniela />} />
-
-                        {/* Módulo de Gestión de Quinielas */}
                         <Route path="/dashboard/admin/quinielas" element={<ManageQuinielas />} />
                         
-                        {/* Detalle y Submódulos */}
-                        <Route path="/dashboard/admin/quinielas/:id" element={<QuinielaDetail />} />
-                        <Route path="/dashboard/admin/quinielas/:id/results" element={<ResultsManager />} />
-                        <Route path="/dashboard/admin/quinielas/:id/participants" element={<ParticipantsManager />} />
+                        {/* [MODIFICADO] Se usa :quinielaId para que Leaderboard lo reconozca correctamente */}
+                        <Route path="/dashboard/admin/quinielas/:quinielaId" element={<QuinielaDetail />} />
+                        <Route path="/dashboard/admin/quinielas/:quinielaId/results" element={<ResultsManager />} />
+                        <Route path="/dashboard/admin/quinielas/:quinielaId/participants" element={<ParticipantsManager />} />
                         
-                        {/* [NUEVO] Ruta para que el Admin vea el Leaderboard */}
-                        <Route path="/dashboard/admin/quinielas/:id/leaderboard" element={<Leaderboard />} />
+                        {/* [NUEVA RUTA] Permite al admin ver la tabla de posiciones */}
+                        <Route path="/dashboard/admin/quinielas/:quinielaId/leaderboard" element={<Leaderboard />} />
 
-                        {/* Redirección de compatibilidad */}
                         <Route path="/dashboard/admin/manage" element={<Navigate to="/dashboard/admin/quinielas" replace />} />
                     </Route>
                 </Route>

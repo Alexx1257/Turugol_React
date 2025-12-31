@@ -4,7 +4,8 @@ import { db } from '../../../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 
 const QuinielaDetail = () => {
-    const { id } = useParams();
+    // [MODIFICADO] Cambiamos id por quinielaId para coincidir con la ruta de App.jsx
+    const { quinielaId } = useParams();
     const navigate = useNavigate();
 
     const [quiniela, setQuiniela] = useState(null);
@@ -14,7 +15,7 @@ const QuinielaDetail = () => {
     useEffect(() => {
         const fetchQuiniela = async () => {
             try {
-                const docRef = doc(db, 'quinielas', id);
+                const docRef = doc(db, 'quinielas', quinielaId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -30,25 +31,20 @@ const QuinielaDetail = () => {
             }
         };
 
-        if (id) fetchQuiniela();
-    }, [id, navigate]);
+        if (quinielaId) fetchQuiniela();
+    }, [quinielaId, navigate]);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando detalles...</div>;
     if (!quiniela) return null;
 
-    // Cálculos de estado para la UI
     const deadlineDate = new Date(quiniela.metadata.deadline);
     const now = new Date();
     const isOpen = now < deadlineDate;
-    const isClosed = !isOpen;
     const totalMatches = quiniela.fixtures ? quiniela.fixtures.length : 0;
-    
-    // Calcular cuántos partidos ya tienen resultado final
     const matchesFinished = quiniela.fixtures ? quiniela.fixtures.filter(f => f.status === 'FT' || f.result).length : 0;
 
     return (
         <div className="max-w-6xl mx-auto p-4 lg:p-8">
-            {/* Navegación Breadcrumb */}
             <nav className="flex items-center text-sm text-gray-500 mb-6">
                 <Link to="/dashboard/admin/quinielas" className="hover:text-blue-600 transition-colors">
                     <i className="fas fa-arrow-left mr-2"></i> Volver a la Lista
@@ -57,7 +53,6 @@ const QuinielaDetail = () => {
                 <span className="font-semibold text-gray-800">Detalle</span>
             </nav>
 
-            {/* Encabezado Principal */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -72,19 +67,15 @@ const QuinielaDetail = () => {
                     </p>
                 </div>
                 
-                {/* ID para referencia técnica */}
                 <div className="text-right hidden md:block">
                     <p className="text-xs text-gray-400 font-mono mb-1">ID DEL EVENTO</p>
-                    <code className="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 select-all">{id}</code>
+                    <code className="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 select-all">{quinielaId}</code>
                 </div>
             </div>
 
-            {/* Grid de Acciones (El Menú Principal) - Actualizado a 4 columnas */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                
-                {/* 1. Tarjeta: PARTICIPANTES */}
                 <Link 
-                    to={`/dashboard/admin/quinielas/${id}/participants`}
+                    to={`/dashboard/admin/quinielas/${quinielaId}/participants`}
                     className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all flex flex-col items-center text-center cursor-pointer relative overflow-hidden"
                 >
                     <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
@@ -92,13 +83,11 @@ const QuinielaDetail = () => {
                         <i className="fas fa-users"></i>
                     </div>
                     <h3 className="font-bold text-lg text-gray-800 mb-1">Participantes</h3>
-                    <p className="text-sm text-gray-500 mb-4">Gestionar pagos y ver usuarios inscritos.</p>
-                    <span className="text-blue-600 text-sm font-semibold group-hover:underline">Gestionar Pagos &rarr;</span>
+                    <p className="text-sm text-gray-500 mb-4">Gestionar pagos y usuarios.</p>
                 </Link>
 
-                {/* 2. Tarjeta: RESULTADOS */}
                 <Link 
-                    to={`/dashboard/admin/quinielas/${id}/results`}
+                    to={`/dashboard/admin/quinielas/${quinielaId}/results`}
                     className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-purple-200 transition-all flex flex-col items-center text-center cursor-pointer relative overflow-hidden"
                 >
                     <div className="absolute top-0 left-0 w-full h-1 bg-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
@@ -106,15 +95,12 @@ const QuinielaDetail = () => {
                         <i className="fas fa-trophy"></i>
                     </div>
                     <h3 className="font-bold text-lg text-gray-800 mb-1">Resultados</h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                        {matchesFinished} de {totalMatches} partidos finalizados.
-                    </p>
-                    <span className="text-purple-600 text-sm font-semibold group-hover:underline">Cargar Marcadores &rarr;</span>
+                    <p className="text-sm text-gray-500 mb-4">{matchesFinished} de {totalMatches} finalizados.</p>
                 </Link>
 
-                {/* [NUEVA] 3. Tarjeta: POSICIONES */}
+                {/* [NUEVA TARJETA] */}
                 <Link 
-                    to={`/dashboard/admin/quinielas/${id}/leaderboard`}
+                    to={`/dashboard/admin/quinielas/${quinielaId}/leaderboard`}
                     className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-emerald-200 transition-all flex flex-col items-center text-center cursor-pointer relative overflow-hidden"
                 >
                     <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
@@ -122,22 +108,18 @@ const QuinielaDetail = () => {
                         <i className="fas fa-list-ol"></i>
                     </div>
                     <h3 className="font-bold text-lg text-gray-800 mb-1">Posiciones</h3>
-                    <p className="text-sm text-gray-500 mb-4">Ver ranking de puntos de los jugadores.</p>
-                    <span className="text-emerald-600 text-sm font-semibold group-hover:underline">Ver Tabla &rarr;</span>
+                    <p className="text-sm text-gray-500 mb-4">Ver tabla de puntos.</p>
                 </Link>
 
-                {/* 4. Tarjeta: CONFIGURACIÓN */}
-                <div className="group bg-gray-50 p-6 rounded-2xl border border-gray-200 flex flex-col items-center text-center relative overflow-hidden opacity-75">
+                <div className="group bg-gray-50 p-6 rounded-2xl border border-gray-200 flex flex-col items-center text-center opacity-75">
                     <div className="w-14 h-14 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-2xl mb-4">
                         <i className="fas fa-cog"></i>
                     </div>
                     <h3 className="font-bold text-lg text-gray-700 mb-1">Configuración</h3>
-                    <p className="text-sm text-gray-500 mb-4">Editar título o fechas (Próximamente).</p>
-                    <span className="text-gray-400 text-xs font-semibold border border-gray-300 px-2 py-1 rounded">No disponible</span>
+                    <p className="text-sm text-gray-500 mb-4">Próximamente.</p>
                 </div>
             </div>
 
-            {/* Resumen Rápido de Partidos */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-700">Resumen de Partidos</h3>
