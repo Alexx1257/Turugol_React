@@ -79,8 +79,8 @@ const QuinielaDetail = () => {
                 </div>
             </div>
 
-            {/* Grid de Acciones (El Menú Principal) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Grid de Acciones (El Menú Principal) - Actualizado a 4 columnas */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 
                 {/* 1. Tarjeta: PARTICIPANTES */}
                 <Link 
@@ -112,7 +112,21 @@ const QuinielaDetail = () => {
                     <span className="text-purple-600 text-sm font-semibold group-hover:underline">Cargar Marcadores &rarr;</span>
                 </Link>
 
-                {/* 3. Tarjeta: CONFIGURACIÓN (Futura) */}
+                {/* [NUEVA] 3. Tarjeta: POSICIONES */}
+                <Link 
+                    to={`/dashboard/admin/quinielas/${id}/leaderboard`}
+                    className="group bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-emerald-200 transition-all flex flex-col items-center text-center cursor-pointer relative overflow-hidden"
+                >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+                    <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                        <i className="fas fa-list-ol"></i>
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-800 mb-1">Posiciones</h3>
+                    <p className="text-sm text-gray-500 mb-4">Ver ranking de puntos de los jugadores.</p>
+                    <span className="text-emerald-600 text-sm font-semibold group-hover:underline">Ver Tabla &rarr;</span>
+                </Link>
+
+                {/* 4. Tarjeta: CONFIGURACIÓN */}
                 <div className="group bg-gray-50 p-6 rounded-2xl border border-gray-200 flex flex-col items-center text-center relative overflow-hidden opacity-75">
                     <div className="w-14 h-14 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-2xl mb-4">
                         <i className="fas fa-cog"></i>

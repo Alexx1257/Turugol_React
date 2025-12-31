@@ -1,11 +1,11 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom'; // Agregamos Navigate para redirecciones
+import { Routes, Route, Navigate } from 'react-router-dom'; 
 import Home from './pages/Home';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword'; // [NUEVO] Importación recuperación
+import ForgotPassword from './pages/ForgotPassword'; 
 
-// [NUEVO] Importación de Sonner para notificaciones globales
+// Importación de Sonner
 import { Toaster } from 'sonner';
 
 // Layouts
@@ -26,7 +26,7 @@ import CreateQuiniela from './pages/admin/CreateQuiniela';
 import ManageQuinielas from './pages/admin/ManageQuinielas'; 
 import UserManagement from './pages/admin/UserManagement';
 
-// [NUEVO] Importamos los submódulos de quiniela
+// Submódulos de quiniela
 import QuinielaDetail from './pages/admin/quinielas/QuinielaDetail';
 import ResultsManager from './pages/admin/quinielas/ResultsManager';
 import ParticipantsManager from './pages/admin/quinielas/ParticipantsManager';
@@ -36,8 +36,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 function App() {
     return (
         <div className="App">
-            {/* [NUEVO] Componente Toaster: Controla la aparición de notificaciones tipo Toast */}
-            {/* position: ubicación, richColors: colores para éxito/error, closeButton: permite cerrar manual */}
             <Toaster position="top-right" richColors closeButton />
 
             <Routes>
@@ -47,9 +45,7 @@ function App() {
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
 
-                {/* 2. RUTAS DE USUARIO - MODIFICACIÓN: requiredRole="user" es CLAVE */}
-                {/* Al cerrar sesión, role pasa a null, ProtectedRoute detecta que 
-                    null !== "user" y muestra el Spinner en lugar de saltar al Login */}
+                {/* 2. RUTAS DE USUARIO */}
                 <Route element={<ProtectedRoute requiredRole="user" />}>
                     <Route element={<UserLayout />}>
                         <Route path="/dashboard/user" element={<UserDashboardPage />} />
@@ -61,7 +57,7 @@ function App() {
                     </Route>
                 </Route>
 
-                {/* 3. RUTAS DE ADMIN (Reestructurado) */}
+                {/* 3. RUTAS DE ADMIN */}
                 <Route element={<ProtectedRoute requiredRole="admin" />}>
                     <Route element={<AdminLayout />}>
                         <Route path="/dashboard/admin" element={<AdminDashboardPage />} />
@@ -77,6 +73,9 @@ function App() {
                         <Route path="/dashboard/admin/quinielas/:id" element={<QuinielaDetail />} />
                         <Route path="/dashboard/admin/quinielas/:id/results" element={<ResultsManager />} />
                         <Route path="/dashboard/admin/quinielas/:id/participants" element={<ParticipantsManager />} />
+                        
+                        {/* [NUEVO] Ruta para que el Admin vea el Leaderboard */}
+                        <Route path="/dashboard/admin/quinielas/:id/leaderboard" element={<Leaderboard />} />
 
                         {/* Redirección de compatibilidad */}
                         <Route path="/dashboard/admin/manage" element={<Navigate to="/dashboard/admin/quinielas" replace />} />
